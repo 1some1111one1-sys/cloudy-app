@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:allowBackup="false"
+        android:label="Cloudy"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+
+        <activity android:name=".MainActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".AddDriveActivity"
+            android:exported="false"
+            android:label="Add a drive"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- Signs in on the real TeraBox website in a web view and hands back only the session cookie. -->
+        <activity
+            android:name=".TeraBoxLoginActivity"
+            android:exported="false"
+            android:label="Sign in to TeraBox" />
+
+        <!-- Shows every connected drive in the system Files app / file pickers; files are streamed from the cloud. -->
+        <provider
+            android:name=".CloudyProvider"
+            android:authorities="com.cloudy.app.documents"
+            android:exported="true"
+            android:grantUriPermissions="true"
+            android:permission="android.permission.MANAGE_DOCUMENTS">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
+    </application>
+</manifest>
