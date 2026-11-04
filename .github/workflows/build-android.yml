@@ -9,7 +9,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: android-client
@@ -21,14 +21,32 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # `packages: ''` stops the action installing its obsolete default package set (which fails);
+      # we install exactly what the build needs below.
       - uses: android-actions/setup-android@v3
+        with:
+          packages: ""
+
+      - name: Install Android platform and build tools
+        run: |
+          sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+          yes | sdkmanager --licenses
 
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
 
       - name: Build debug APK
-        run: gradle --no-daemon :app:assembleDebug
+        run: |
+          set -o pipefail
+          gradle --no-daemon --stacktrace :app:assembleDebug 2>&1 | tee build.log
+
+      - name: Report build errors
+        if: failure()
+        run: |
+          grep -E -A3 "^e: |error:|What went wrong|Execution failed|FAILURE" build.log | head -80 | while IFS= read -r line; do
+            echo "::error::${line}"
+          done
 
       - uses: actions/upload-artifact@v4
         with:
