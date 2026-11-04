@@ -3,6 +3,8 @@ package com.clouddroid.app.settings
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -23,6 +25,8 @@ data class AppSettings(
     val autoQuality: Boolean = true,
     val audioEnabled: Boolean = true,
     val autoBackup: Boolean = true,
+    val pinned: Set<String> = emptySet(),
+    val dataUsedBytes: Long = 0,
 )
 
 class SettingsStore(private val context: Context) {
@@ -33,6 +37,8 @@ class SettingsStore(private val context: Context) {
         val autoQuality = booleanPreferencesKey("auto_quality")
         val audio = booleanPreferencesKey("audio")
         val autoBackup = booleanPreferencesKey("auto_backup")
+        val pinned = stringSetPreferencesKey("pinned")
+        val dataUsed = longPreferencesKey("data_used")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { p ->
@@ -44,6 +50,8 @@ class SettingsStore(private val context: Context) {
             autoQuality = p[Keys.autoQuality] ?: true,
             audioEnabled = p[Keys.audio] ?: true,
             autoBackup = p[Keys.autoBackup] ?: true,
+            pinned = p[Keys.pinned] ?: emptySet(),
+            dataUsedBytes = p[Keys.dataUsed] ?: 0L,
         )
     }
 
@@ -56,4 +64,15 @@ class SettingsStore(private val context: Context) {
     suspend fun setAutoQuality(v: Boolean) = context.dataStore.edit { it[Keys.autoQuality] = v }
     suspend fun setAudio(v: Boolean) = context.dataStore.edit { it[Keys.audio] = v }
     suspend fun setAutoBackup(v: Boolean) = context.dataStore.edit { it[Keys.autoBackup] = v }
+
+    suspend fun togglePinned(pkg: String) = context.dataStore.edit {
+        val cur = it[Keys.pinned] ?: emptySet()
+        it[Keys.pinned] = if (pkg in cur) cur - pkg else cur + pkg
+    }
+
+    suspend fun addDataUsed(bytes: Long) = context.dataStore.edit {
+        it[Keys.dataUsed] = (it[Keys.dataUsed] ?: 0L) + bytes.coerceAtLeast(0)
+    }
+
+    suspend fun resetDataUsed() = context.dataStore.edit { it[Keys.dataUsed] = 0L }
 }

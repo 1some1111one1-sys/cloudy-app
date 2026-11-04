@@ -14,6 +14,8 @@ data class DeviceInfo(
     @SerialName("disk_used_mb") val diskUsedMb: Long = 0,
     @SerialName("cpu_percent") val cpuPercent: Double = 0.0,
     @SerialName("ram_used_mb") val ramUsedMb: Long = 0,
+    val model: String = "",
+    val error: String? = null,
 )
 
 @Serializable
@@ -45,16 +47,53 @@ data class CloudEntry(
 )
 
 @Serializable
-data class LoginRequest(val provider: String, val email: String, val password: String)
-
-@Serializable
 data class InstallRequest(val provider: String, val path: String)
 
 @Serializable
 data class InstallJob(
     val id: String,
-    val state: String, // downloading | inspecting | installing | done | failed
+    val state: String, // queued | downloading | inspecting | installing | done | failed
     val progress: Double = 0.0,
     @SerialName("package_name") val packageName: String? = null,
+    val label: String? = null,
     val error: String? = null,
 )
+
+@Serializable
+data class BackupInfo(
+    val id: String,
+    @SerialName("package_name") val packageName: String,
+    val provider: String,
+    @SerialName("created_at") val createdAt: String,
+    @SerialName("size_bytes") val sizeBytes: Long = 0,
+    @SerialName("files_changed") val filesChanged: Int = 0,
+    @SerialName("files_total") val filesTotal: Int = 0,
+    val kind: String = "incremental", // full | incremental
+)
+
+@Serializable
+data class IceServerDto(
+    val urls: List<String>,
+    val username: String? = null,
+    val credential: String? = null,
+)
+
+@Serializable
+data class StreamSessionDto(
+    @SerialName("session_id") val sessionId: String,
+    @SerialName("ice_servers") val iceServers: List<IceServerDto> = emptyList(),
+    val width: Int = 0,
+    val height: Int = 0,
+)
+
+@Serializable
+data class MegaLoginRequest(val email: String, val password: String)
+
+@Serializable
+data class StreamSessionRequest(
+    @SerialName("package_name") val packageName: String? = null,
+    val profile: String = "BALANCED",
+)
+
+@Serializable
+data class BackupRequest(val provider: String, @SerialName("backup_id") val backupId: String? = null)

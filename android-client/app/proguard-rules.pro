@@ -2,3 +2,5 @@
 -dontnote kotlinx.serialization.AnnotationsKt
 -keepclassmembers class kotlinx.serialization.json.** { *** Companion; }
 -keepclasseswithmembers class com.clouddroid.app.** { kotlinx.serialization.KSerializer serializer(...); }
+-keep class org.webrtc.** { *; }
+-dontwarn org.webrtc.**
