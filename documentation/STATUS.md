@@ -5,8 +5,8 @@
 | Area | State | Verified how |
 |---|---|---|
 | Android app: Home, Cloud, Library, Add, Device, Player, Settings | written | compiles in GitHub Actions (debug + release APK). Never run on a phone. |
-| TeraBox web sign-in (WebView cookie) | written | compiles; client tested against an imitation of TeraBox only |
-| MEGA (MEGAcmd) | written | parsers tested on sample text; never run against MEGA |
+| On-phone TeraBox (web sign-in) and MEGA (e-mail + password, 2FA) - no server needed | written | clients ported from the `cloudmemory` repo; 182 checks run in CI against in-process imitations of both services. NEVER run against real TeraBox or MEGA. |
+| Server-side MEGA (MEGAcmd) and TeraBox (for the server to download APKs) | written | parsers tested on sample text; never run against MEGA |
 | Backend REST + WebSocket (FastAPI) | written | syntax-checked only: FastAPI could not be installed here |
 | Backend services (install, apps, backup, storage, ABR, input) | written | 33 unit tests pass |
 | PostgreSQL | schema written | SQLite runs the same SQL; PostgreSQL never run |

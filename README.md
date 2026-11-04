@@ -8,17 +8,23 @@ backups go to, your **TeraBox** or **MEGA** drive.
 > full chain (emulator, WebRTC stream, real TeraBox / MEGA accounts) has not been run together yet.
 > Read `documentation/STATUS.md` for exactly what has and has not been verified.
 
-## You need two things
-1. **The Android app** (this repo builds it in GitHub Actions; download the APK from the Releases page).
-2. **Your own CloudDroid server**: a Linux machine with KVM that runs the backend and the Android emulator.
-   The APK alone does nothing without it. See `documentation/DEPLOYMENT.md`.
+## What works without a server
+Install the APK and use **TeraBox and MEGA right away**: sign in to MEGA with e-mail and password (plus the 6-digit
+code if your account has two-factor), sign in to TeraBox on TeraBox's own website inside the app. Browse, upload from
+the phone, create folders and delete, all directly between the phone and the drive. No URL, no token.
+
+## What needs a server
+**Installing and running Android apps** needs your own CloudDroid server: a Linux machine with KVM that runs the
+backend and the Android emulator. Nothing else can provide a remote Android device. Add it later in Settings
+("Remote device server", optional). See `documentation/DEPLOYMENT.md`.
 
 ## Layout
 ```
 android-client/          Kotlin + Jetpack Compose app (Material 3, WebRTC)
   app/src/main/java/com/clouddroid/app/
     ui/                  screens: Home, Cloud, Library, Add, Device, Player, Settings
-    cloud/               backend REST client, TeraBox web sign-in
+    cloud/               on-phone TeraBox + MEGA (LocalCloud), backend REST client, TeraBox web sign-in
+    core/                MEGA and TeraBox protocol clients (pure Java, tested in CI)
     streaming/           WebRTC client, touch/keyboard capture, reconnect, stats
     device/              data models     settings/   DataStore settings
 backend/                 Python FastAPI
