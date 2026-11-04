@@ -7,9 +7,9 @@ Updated as work proceeds. "Verified" means it was actually built or run.
 | Repository cleared (old code in history at 0f9b344) | done | yes |
 | Project structure | created | yes |
 | Architecture and limitations document | written | n/a |
-| Stage 1: Android client | minimal screen only (full UI not built) | not yet built |
+| Stage 1: Android client | minimal screen only (full UI not built) | debug APK compiles in CI; not run on a device |
 | Stage 2: Backend | not started | no |
-| TeraBox web sign-in (WebView cookie) + Python client | written | Python client: 8 tests pass against a mock server (not real TeraBox). Android side: not yet compiled. FastAPI routes: syntax-checked only |
+| TeraBox web sign-in (WebView cookie) + Python client | written | Python client: 8 tests pass against a mock server (not real TeraBox). Android side: compiles in GitHub Actions (debug APK built), not run on a device. FastAPI routes: syntax-checked only |
 | Stage 3: MEGA, backup sync | not started | no |
 | Stage 4: Android virtualization | not started | no |
 | Stage 5: APK installation | not started | no |
