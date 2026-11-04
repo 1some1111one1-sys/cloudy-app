@@ -1,0 +1,22 @@
+# systemd unit. Install:  sudo cp clouddroid-backend.service /etc/systemd/system/ && sudo systemctl enable --now clouddroid-backend
+# Adjust User, WorkingDirectory and EnvironmentFile. The user must be in the "kvm" group.
+[Unit]
+Description=CloudDroid backend (FastAPI + Android emulator control)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+User=clouddroid
+Group=clouddroid
+SupplementaryGroups=kvm
+WorkingDirectory=/opt/clouddroid
+EnvironmentFile=/opt/clouddroid/cloud-infrastructure/configuration/clouddroid.env
+ExecStart=/opt/clouddroid/.venv/bin/uvicorn backend.main:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=5
+# The emulator is a child process and is stopped with the service; its disk image persists.
+KillMode=control-group
+TimeoutStopSec=90
+
+[Install]
+WantedBy=multi-user.target

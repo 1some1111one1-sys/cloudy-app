@@ -17,8 +17,24 @@ android {
         versionName = "0.1.0"
     }
 
+    signingConfigs {
+        // Release signing comes from environment variables (CI secrets). Without them the release build is signed with
+        // the debug key so it still installs, but updates then need the same key to be used again.
+        create("release") {
+            val ks = System.getenv("CLOUDDROID_KEYSTORE")
+            if (ks != null) {
+                storeFile = file(ks)
+                storePassword = System.getenv("CLOUDDROID_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("CLOUDDROID_KEY_ALIAS")
+                keyPassword = System.getenv("CLOUDDROID_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = if (System.getenv("CLOUDDROID_KEYSTORE") != null)
+                signingConfigs.getByName("release") else signingConfigs.getByName("debug")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(

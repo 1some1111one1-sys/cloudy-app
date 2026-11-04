@@ -1,0 +1,37 @@
+# PostgreSQL, TURN and a TLS reverse proxy. The backend and the Android emulator are NOT in Docker:
+# the emulator needs /dev/kvm and (for good performance) the host GPU, so run them directly on the host
+# with the systemd unit in ../android-vm/.
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: clouddroid
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: clouddroid
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../../database/schema/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  coturn:
+    image: coturn/coturn:4.6
+    restart: unless-stopped
+    network_mode: host      # TURN needs the real UDP ports
+    command: >
+      -n --realm=${TURN_REALM:?set TURN_REALM} --fingerprint --lt-cred-mech
+      --user=${TURN_USER:?set TURN_USER}:${TURN_PASSWORD:?set TURN_PASSWORD}
+      --min-port=49160 --max-port=49200 --no-cli
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    network_mode: host      # reaches the backend on 127.0.0.1:8000 and gets a certificate automatically
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+
+volumes:
+  pgdata:
+  caddy_data:

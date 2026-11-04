@@ -1,0 +1,7 @@
+# Versions are ranges, not pins: PyPI was not reachable from the development workspace, so none of these could be
+# installed and checked there. `pip install -r requirements.txt` on the server is the first real test.
+fastapi>=0.110,<1
+uvicorn[standard]>=0.29,<1
+aiortc>=1.9,<2
+cryptography>=42
+psycopg[binary]>=3.1,<4

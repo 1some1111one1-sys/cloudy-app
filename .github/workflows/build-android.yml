@@ -7,6 +7,9 @@ on:
       - ".github/workflows/build-android.yml"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -36,10 +39,37 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: Build debug APK
+      # Optional: add these repository secrets to sign every build with YOUR key (so updates install over each other):
+      #   CLOUDDROID_KEYSTORE_B64, CLOUDDROID_KEYSTORE_PASSWORD, CLOUDDROID_KEY_ALIAS, CLOUDDROID_KEY_PASSWORD
+      # Without them the build is signed with a throwaway key generated here.
+      - name: Prepare signing key
+        env:
+          KS_B64: ${{ secrets.CLOUDDROID_KEYSTORE_B64 }}
+          KS_PASS: ${{ secrets.CLOUDDROID_KEYSTORE_PASSWORD }}
+          KS_ALIAS: ${{ secrets.CLOUDDROID_KEY_ALIAS }}
+          KS_KEYPASS: ${{ secrets.CLOUDDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            pass="$KS_PASS"; alias="$KS_ALIAS"; keypass="${KS_KEYPASS:-$KS_PASS}"
+            echo "Using the key from repository secrets."
+          else
+            pass="$(openssl rand -hex 16)"; alias="clouddroid"; keypass="$pass"
+            keytool -genkeypair -keystore "$RUNNER_TEMP/release.jks" -storepass "$pass" -keypass "$keypass" \
+              -alias "$alias" -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=CloudDroid"
+            echo "Generated a throwaway signing key for this build."
+          fi
+          {
+            echo "CLOUDDROID_KEYSTORE=$RUNNER_TEMP/release.jks"
+            echo "CLOUDDROID_KEYSTORE_PASSWORD=$pass"
+            echo "CLOUDDROID_KEY_ALIAS=$alias"
+            echo "CLOUDDROID_KEY_PASSWORD=$keypass"
+          } >> "$GITHUB_ENV"
+
+      - name: Build debug and release APKs
         run: |
           set -o pipefail
-          gradle --no-daemon --stacktrace :app:assembleDebug 2>&1 | tee build.log
+          gradle --no-daemon --stacktrace :app:assembleDebug :app:assembleRelease 2>&1 | tee build.log
 
       - name: Report build errors
         if: failure()
@@ -48,7 +78,24 @@ jobs:
             echo "::error::${line}"
           done
 
+      - name: Name the APKs and check the signature
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk CloudDroid-release.apk
+          cp app/build/outputs/apk/debug/app-debug.apk CloudDroid-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs CloudDroid-release.apk | head -3
+          "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging CloudDroid-release.apk | head -3
+          ls -l CloudDroid-*.apk
+
       - uses: actions/upload-artifact@v4
         with:
-          name: clouddroid-debug-apk
-          path: android-client/app/build/outputs/apk/debug/*.apk
+          name: CloudDroid-apks
+          path: android-client/CloudDroid-*.apk
+
+      - name: Publish a release with the APKs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "apk-${{ github.run_number }}" CloudDroid-release.apk CloudDroid-debug.apk \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "CloudDroid build ${{ github.run_number }}" \
+            --notes "Install CloudDroid-release.apk on your Android phone (Android 10+). If it misbehaves, try CloudDroid-debug.apk and report the problem. This is a client only: it needs your own CloudDroid backend server (see documentation/DEPLOYMENT.md)."
