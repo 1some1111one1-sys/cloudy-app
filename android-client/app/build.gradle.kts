@@ -35,6 +35,8 @@ android {
         release {
             signingConfig = if (System.getenv("CLOUDDROID_KEYSTORE") != null)
                 signingConfigs.getByName("release") else signingConfigs.getByName("debug")
+            // 64-bit ARM only: nearly every current phone, and it keeps the APK small. The debug APK keeps all ABIs.
+            ndk { abiFilters += "arm64-v8a" }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
