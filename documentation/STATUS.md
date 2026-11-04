@@ -1,27 +1,30 @@
-# CloudDroid — Build and verification status
+# CloudDroid - build and verification status
 
-Updated as work proceeds. "Verified" means it was actually built or run.
+"Verified" means it was actually compiled or run. Updated at the end of each work session.
 
-| Area | State | Verified |
+| Area | State | Verified how |
 |---|---|---|
-| Repository cleared (old code in history at 0f9b344) | done | yes |
-| Project structure | created | yes |
-| Architecture and limitations document | written | n/a |
-| Stage 1: Android client | minimal screen only (full UI not built) | debug APK compiles in CI; not run on a device |
-| Stage 2: Backend | not started | no |
-| TeraBox web sign-in (WebView cookie) + Python client | written | Python client: 8 tests pass against a mock server (not real TeraBox). Android side: compiles in GitHub Actions (debug APK built), not run on a device. FastAPI routes: syntax-checked only |
-| Stage 3: MEGA, backup sync | not started | no |
-| Stage 4: Android virtualization | not started | no |
-| Stage 5: APK installation | not started | no |
-| Stage 6: WebRTC streaming | not started | no |
-| Stage 7: Cloud persistence | not started | no |
-| Stage 8 to 10: performance, tests, release | not started | no |
+| Android app: Home, Cloud, Library, Add, Device, Player, Settings | written | compiles in GitHub Actions (debug + release APK). Never run on a phone. |
+| TeraBox web sign-in (WebView cookie) | written | compiles; client tested against an imitation of TeraBox only |
+| MEGA (MEGAcmd) | written | parsers tested on sample text; never run against MEGA |
+| Backend REST + WebSocket (FastAPI) | written | syntax-checked only: FastAPI could not be installed here |
+| Backend services (install, apps, backup, storage, ABR, input) | written | 33 unit tests pass |
+| PostgreSQL | schema written | SQLite runs the same SQL; PostgreSQL never run |
+| Android emulator control (adb, lifecycle, persistent AVD) | written | tested with a simulated device; no KVM here |
+| WebRTC streaming (aiortc capture/encode, Android decode) | written | not run: needs emulator, aiortc, a phone |
+| Audio | NOT implemented | emulator runs with -no-audio |
+| Multi-touch / low-latency input | NOT implemented | single touch via `adb shell input` |
+| Multi-user | schema only | API uses one shared token |
+| Release APK | built by CI | signature checked in CI; throwaway key unless you add secrets |
 
-## Not possible from this workspace
-- The workspace has no KVM and no GPU, so the emulator and streaming pipeline cannot be run end to end here.
-- It has no TeraBox or MEGA credentials, so cloud integrations cannot be tested against real accounts here.
-- A release-signed APK needs a keystore that only the owner should hold.
+## Why things could not be verified here
+- The development workspace has no KVM or GPU, no phone, and no TeraBox / MEGA accounts.
+- PyPI is blocked there, so FastAPI, aiortc, psycopg and cryptography were never installed.
+- TeraBox has no public API: the integration is unofficial and can break whenever TeraBox changes its site.
 
-## Notes
-- PyPI is blocked in the development workspace, so FastAPI, httpx and a PostgreSQL driver could not be installed there. The TeraBox client uses only the Python standard library for that reason.
-- TeraBox sign-in is unofficial and has only been tested against an imitation server. The first real sign-in is the true test.
+## Most likely first failures on a real deployment
+1. `pip install` version conflicts (requirements are ranges, not pins).
+2. MEGAcmd output formats differing from the parsers.
+3. TeraBox changing a web endpoint or requiring a security check.
+4. aiortc / PyAV H.264 encode CPU load on small servers.
+5. R8 (release build) stripping something at runtime: try the debug APK to tell.
