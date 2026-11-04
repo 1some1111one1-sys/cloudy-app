@@ -47,16 +47,6 @@ fun HomeScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
-        if (settings.serverUrl.isBlank() || settings.token.isBlank()) {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                onClick = onOpenSettings) {
-                Column(Modifier.padding(16.dp)) {
-                    Text("Connect to your CloudDroid server", fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
-                    Text("Open Settings and enter the backend URL and access token.")
-                }
-            }
-        }
-
         // remote device status
         Card(Modifier.fillMaxWidth().clickable(onClick = onOpenDevice)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -66,6 +56,8 @@ fun HomeScreen(
                 }
                 Text(
                     when {
+                        settings.serverUrl.isBlank() || settings.token.isBlank() ->
+                            "No server set up. Needed only to run apps; cloud storage works without it."
                         dev == null -> "Not reachable"
                         dev.status == "running" -> "Running · Android ${dev.androidVersion} · ${dev.cpuCores} CPU · ${dev.ramMb} MB RAM"
                         else -> dev.status.replaceFirstChar { it.uppercase() }

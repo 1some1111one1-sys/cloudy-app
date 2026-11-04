@@ -11,6 +11,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.clouddroid.app.cloud.BackendApi
 import com.clouddroid.app.cloud.BackendException
+import com.clouddroid.app.cloud.LocalCloud
 import com.clouddroid.app.device.*
 import com.clouddroid.app.settings.AppSettings
 import com.clouddroid.app.settings.SettingsStore
@@ -27,6 +28,8 @@ fun providerName(p: String) = if (p == "terabox") "TeraBox" else "MEGA"
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     val store = SettingsStore(app)
+    /** TeraBox and MEGA are used directly from the phone; no server is needed for them. */
+    val cloud = LocalCloud(app)
     val settings: StateFlow<AppSettings> =
         store.settings.stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
 
@@ -35,6 +38,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var providers by mutableStateOf<Map<String, CloudProviderStatus>>(emptyMap())
     var message by mutableStateOf<String?>(null)
     var loading by mutableStateOf(false)
+    /** Set when MEGA asked for a two-factor code, so the sign-in dialog shows that field. */
+    var megaNeedsCode by mutableStateOf(false)
 
     // file browser
     var browseEntries by mutableStateOf<List<CloudEntry>>(emptyList())
@@ -51,9 +56,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun fail(e: Throwable, provider: String? = null) {
         message = when {
-            e is BackendException && e.authExpired && provider != null ->
-                "${providerName(provider)} session expired. Connect it again."
-            e is BackendException && e.authExpired -> "The backend rejected the access token or the account session expired."
+            e is BackendException && e.authExpired && provider == null ->
+                "The server rejected the access token, or the account session expired."
             else -> e.message ?: e.toString()
         }
     }
@@ -67,24 +71,30 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         loading = true
         try {
             val a = api()
-            if (!a.configured) { message = "Set the backend URL and access token in Settings."; return@launchSafe }
-            runCatching { device = a.device() }.onFailure { fail(it) }
-            runCatching { apps = a.apps() }
+            if (a.configured) {
+                runCatching { device = a.device() }.onFailure { fail(it) }
+                runCatching { apps = a.apps() }
+            } else {
+                device = null
+                apps = emptyList()
+            }
             refreshProviders()
         } finally { loading = false }
     }
 
-    fun refreshDevice() = launchSafe { device = api().device() }
+    /** True when a CloudDroid server is set up. Cloud storage works without one; running apps does not. */
+    val hasServer get() = api().configured
 
-    fun refreshApps() = launchSafe { apps = api().apps() }
+    fun refreshDevice() = launchSafe { if (hasServer) device = api().device() }
+
+    fun refreshApps() = launchSafe { if (hasServer) apps = api().apps() }
 
     suspend fun refreshProviders() {
-        val a = api()
-        if (!a.configured) return
         val out = mutableMapOf<String, CloudProviderStatus>()
         for (p in PROVIDERS) {
-            out[p] = try { a.providerStatus(p) } catch (e: Exception) {
-                CloudProviderStatus(p, connected = false, error = e.message)
+            out[p] = try { cloud.status(p) } catch (e: Exception) {
+                if (e is BackendException && e.authExpired) message = "${providerName(p)} session expired. Sign in again."
+                CloudProviderStatus(p, connected = false, error = if (e is BackendException && e.authExpired) null else e.message)
             }
         }
         providers = out
@@ -92,39 +102,57 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun refreshProvidersAsync() = launchSafe { refreshProviders() }
 
-    // ------------------------------------------------------------ cloud accounts
+    // ------------------------------------------------------------ cloud accounts (direct from the phone)
     fun connectTeraBox(cookie: String, site: String) = launchSafe("terabox") {
-        api().connectTeraBox(cookie, site)
+        cloud.connectTeraBox(cookie, site)
         refreshProviders()
         message = "TeraBox connected."
+        shareWithServer("terabox") { api().connectTeraBox(cookie, site) }
     }
 
-    fun connectMega(email: String, password: String) = launchSafe("mega") {
-        api().connectMega(email, password)
+    fun connectMega(email: String, password: String, code: String, appKey: String) = launchSafe("mega") {
+        try {
+            cloud.connectMega(email, password, code, appKey)
+        } catch (e: BackendException) {
+            megaNeedsCode = e.message.orEmpty().contains("two-factor", ignoreCase = true)
+            throw e
+        }
+        megaNeedsCode = false
         refreshProviders()
         message = "MEGA connected."
+        shareWithServer("mega") { api().connectMega(email, password) }
+    }
+
+    /** If a server is set up it also needs the drive (it downloads APKs and stores backups). Failure is not fatal. */
+    private suspend fun shareWithServer(provider: String, call: suspend () -> Unit) {
+        if (!hasServer) return
+        try { call() } catch (e: Exception) {
+            message = "${providerName(provider)} is connected on this phone, but your server could not use it: ${e.message}"
+        }
     }
 
     fun disconnect(provider: String) = launchSafe(provider) {
-        api().disconnect(provider)
+        cloud.disconnect(provider)
+        if (hasServer) runCatching { api().disconnect(provider) }
         refreshProviders()
     }
 
     fun browse(provider: String, path: String) = launchSafe(provider) {
         browseLoading = true
-        try { browseEntries = api().list(provider, path) } catch (e: Exception) {
+        try { browseEntries = cloud.list(provider, path) } catch (e: Exception) {
             browseEntries = emptyList(); throw e
         } finally { browseLoading = false }
     }
 
     fun deleteCloudFile(provider: String, path: String, parent: String) = launchSafe(provider) {
-        api().deleteFile(provider, path)
-        browseEntries = api().list(provider, parent)
+        val isDir = browseEntries.firstOrNull { it.path == path }?.isDir ?: false
+        cloud.delete(provider, path, isDir)
+        browseEntries = cloud.list(provider, parent)
     }
 
     fun makeFolder(provider: String, path: String, parent: String) = launchSafe(provider) {
-        api().mkdir(provider, path)
-        browseEntries = api().list(provider, parent)
+        cloud.mkdir(provider, path)
+        browseEntries = cloud.list(provider, parent)
     }
 
     fun displayName(resolver: ContentResolver, uri: Uri): Pair<String, Long> {
@@ -140,16 +168,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return name to size
     }
 
-    /** Uploads a file from the phone into [folder] on the drive. Returns the cloud path through [done]. */
+    /** Uploads a file from the phone into [folder] on the drive. */
     fun upload(provider: String, folder: String, uri: Uri, done: (String) -> Unit = {}) = launchSafe(provider) {
         val resolver = getApplication<Application>().contentResolver
         val (name, size) = displayName(resolver, uri)
         val dest = (if (folder.endsWith("/")) folder else "$folder/") + name
         transfer = "Uploading $name" to 0f
         try {
-            api().uploadFile(provider, dest, resolver, uri, size) { sent, total ->
-                transfer = "Uploading $name" to (if (total > 0) sent.toFloat() / total else 0f)
-            }
+            cloud.upload(provider, dest, uri, size) { transfer = "Uploading $name" to it }
             message = "Uploaded $name to ${providerName(provider)}."
             done(dest)
         } finally { transfer = null }
@@ -157,6 +183,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ------------------------------------------------------------ device
     fun deviceAction(action: String) = launchSafe {
+        if (!hasServer) { message = "Add a CloudDroid server in Settings first."; return@launchSafe }
         device = api().deviceAction(action)
         // starting takes a while: poll until it settles
         var tries = 0
@@ -168,6 +195,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ------------------------------------------------------------ apps
     fun install(provider: String, path: String) = launchSafe(provider) {
+        if (!hasServer) {
+            message = "Installing and running apps needs a CloudDroid server. Add one in Settings."
+            return@launchSafe
+        }
         var j = api().install(provider, path)
         job = j
         while (j.state !in listOf("done", "failed")) {
@@ -217,7 +248,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun togglePinned(pkg: String) = viewModelScope.launch { store.togglePinned(pkg) }
 
     // ------------------------------------------------------------ settings
-    fun saveServer(url: String, token: String) = viewModelScope.launch { store.setServer(url, token) }
+    fun saveServer(url: String, token: String) = viewModelScope.launch {
+        store.setServer(url, token)
+        val tb = cloud.teraBoxSession()
+        if (url.isNotBlank() && token.isNotBlank() && tb != null) {
+            try { BackendApi(url, token).connectTeraBox(tb.first, tb.second) } catch (_: Exception) {}
+        }
+        if (url.isNotBlank() && cloud.isConnected("mega"))
+            message = "To let your server use MEGA, disconnect and connect MEGA again (the password is not stored)."
+    }
     fun setProfile(p: StreamProfile) = viewModelScope.launch { store.setProfile(p) }
     fun setAuto(v: Boolean) = viewModelScope.launch { store.setAutoQuality(v) }
     fun setAudio(v: Boolean) = viewModelScope.launch { store.setAudio(v) }

@@ -66,6 +66,12 @@ jobs:
             echo "CLOUDDROID_KEY_PASSWORD=$keypass"
           } >> "$GITHUB_ENV"
 
+      - name: Test the MEGA and TeraBox clients (against in-process imitations of the services)
+        run: |
+          mkdir -p "$RUNNER_TEMP/coretest"
+          javac -nowarn -d "$RUNNER_TEMP/coretest" --release 17 app/src/main/java/com/clouddroid/app/core/*.java tests/*.java
+          java -cp "$RUNNER_TEMP/coretest" com.clouddroid.app.core.TestMain
+
       - name: Build debug and release APKs
         run: |
           set -o pipefail

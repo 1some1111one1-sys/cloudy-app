@@ -67,7 +67,7 @@ fun CloudStorageScreen(vm: AppViewModel, onBrowse: (String) -> Unit) {
                         style = MaterialTheme.typography.bodySmall)
                     if (connected) UsageBar(s!!.usedBytes, s.totalBytes)
                     if (p == "terabox" && !connected) {
-                        Text("Unofficial: you sign in on TeraBox's own website and CloudDroid keeps only the session cookie. " +
+                        Text("Unofficial: you sign in on TeraBox's own website (e-mail and password there) and CloudDroid keeps only the session cookie. " +
                             "It can stop working if TeraBox changes its site.",
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -96,34 +96,61 @@ fun CloudStorageScreen(vm: AppViewModel, onBrowse: (String) -> Unit) {
         }
     }
 
-    if (megaDialog) MegaDialog(onDismiss = { megaDialog = false }) { email, pw ->
-        megaDialog = false
-        vm.connectMega(email, pw)
+    // The dialog stays open while signing in, so a wrong password or a missing two-factor code can be fixed in place.
+    val megaConnected = vm.providers["mega"]?.connected == true
+    LaunchedEffect(megaConnected) { if (megaConnected) megaDialog = false }
+    if (megaDialog) MegaDialog(needsCode = vm.megaNeedsCode, onDismiss = { megaDialog = false; vm.megaNeedsCode = false }) { email, pw, code, key ->
+        vm.connectMega(email, pw, code, key)
     }
 }
 
 @Composable
-private fun MegaDialog(onDismiss: () -> Unit, onConnect: (String, String) -> Unit) {
+private fun MegaDialog(needsCode: Boolean, onDismiss: () -> Unit, onConnect: (String, String, String, String) -> Unit) {
     var email by remember { mutableStateOf("") }
     var pw by remember { mutableStateOf("") }
+    var code by remember { mutableStateOf("") }
+    var key by remember { mutableStateOf("") }
+    var advanced by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Connect MEGA") },
+        title = { Text("Sign in to MEGA") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("MEGA has no web sign-in token for apps, so your e-mail and password are sent over HTTPS to YOUR " +
-                    "CloudDroid server, which logs in with MEGAcmd. They are not stored by this app.",
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
+                Text("Your e-mail and password go straight from this phone to MEGA. Everything is decrypted on this phone, " +
+                    "and the password is not stored: only MEGA's sign-in session is kept, encrypted.",
                     style = MaterialTheme.typography.bodySmall)
                 OutlinedTextField(email, { email = it }, label = { Text("E-mail") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
                 OutlinedTextField(pw, { pw = it }, label = { Text("Password") }, singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
+                if (needsCode) {
+                    Text("This account uses two-factor authentication. Enter the current 6-digit code.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    OutlinedTextField(code, { code = it.filter(Char::isDigit).take(6) }, label = { Text("6-digit code") }, singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword))
+                }
+                TextButton(onClick = { advanced = !advanced }) { Text(if (advanced) "Hide advanced" else "Advanced") }
+                if (advanced) {
+                    Text("Only fill this in if MEGA answers that it needs an app key (free at mega.io/developers).",
+                        style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(key, { key = it }, label = { Text("App key (optional)") }, singleLine = true)
+                }
+                vmErrorHint()
             }
         },
-        confirmButton = { TextButton(enabled = email.isNotBlank() && pw.isNotBlank(), onClick = { onConnect(email.trim(), pw) }) { Text("Connect") } },
+        confirmButton = {
+            TextButton(enabled = email.isNotBlank() && pw.isNotBlank() && (!needsCode || code.length == 6),
+                onClick = { onConnect(email.trim(), pw, code, key) }) { Text("Sign in") }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
+}
+
+@Composable
+private fun vmErrorHint() {
+    Text("If sign-in fails, the reason appears at the bottom of the screen.", style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 /**

@@ -30,12 +30,17 @@ fun SettingsScreen(vm: AppViewModel, onOpenLibrary: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Settings", style = MaterialTheme.typography.headlineMedium)
 
-        SectionTitle("Backend")
+        SectionTitle("Remote device server (optional)")
+        Text("TeraBox and MEGA need no server. Fill this in only to install and run Android apps on a CloudDroid server you set up.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         OutlinedTextField(url, { url = it }, label = { Text("Server URL (https://…)") }, singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri), modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(token, { token = it }, label = { Text("Access token") }, singleLine = true,
+        OutlinedTextField(token, { token = it }, label = { Text("Server access token") }, singleLine = true,
             visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-        Button(onClick = { vm.saveServer(url, token); vm.refreshAll() }) { Text("Save and test") }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { vm.saveServer(url, token); vm.refreshAll() }) { Text("Save and test") }
+            if (url.isNotBlank() || token.isNotBlank()) TextButton(onClick = { url = ""; token = ""; vm.saveServer("", ""); vm.refreshAll() }) { Text("Remove server") }
+        }
         if (url.startsWith("http://")) Text("Use https:// — this connection would send your access token unencrypted.",
             color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
 

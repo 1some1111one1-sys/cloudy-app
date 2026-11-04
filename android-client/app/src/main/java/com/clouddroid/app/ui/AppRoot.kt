@@ -70,15 +70,15 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
                     onOpenSettings = { tab("settings") })
             }
             composable("library") {
-                LibraryScreen(vm, onLaunch = { nav.navigate("player/$it") }, onUpdate = { nav.navigate("add") })
+                LibraryScreen(vm, onLaunch = { nav.navigate("player/$it") }, onUpdate = { nav.navigate("add") }, onOpenSettings = { tab("settings") })
             }
             composable("add") {
-                AddScreen(vm, onPick = { nav.navigate("browse/$it?pick=true") })
+                AddScreen(vm, onPick = { nav.navigate("browse/$it?pick=true") }, onOpenSettings = { tab("settings") })
             }
             composable("cloud") {
                 CloudStorageScreen(vm, onBrowse = { nav.navigate("browse/$it?pick=false") })
             }
-            composable("device") { DeviceScreen(vm) }
+            composable("device") { DeviceScreen(vm, onOpenSettings = { tab("settings") }) }
             composable("settings") { SettingsScreen(vm, onOpenLibrary = { tab("library") }) }
             composable(
                 "browse/{provider}?pick={pick}",

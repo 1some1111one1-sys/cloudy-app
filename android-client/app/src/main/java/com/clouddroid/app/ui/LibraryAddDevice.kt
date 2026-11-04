@@ -17,7 +17,7 @@ import com.clouddroid.app.device.InstalledApp
 
 /** SCREEN 3: app library. */
 @Composable
-fun LibraryScreen(vm: AppViewModel, onLaunch: (String) -> Unit, onUpdate: () -> Unit) {
+fun LibraryScreen(vm: AppViewModel, onLaunch: (String) -> Unit, onUpdate: () -> Unit, onOpenSettings: () -> Unit) {
     LaunchedEffect(Unit) { vm.refreshApps() }
     val settings = vm.settings.collectAsStateCompat()
     var uninstall by remember { mutableStateOf<InstalledApp?>(null) }
@@ -34,7 +34,8 @@ fun LibraryScreen(vm: AppViewModel, onLaunch: (String) -> Unit, onUpdate: () -> 
         Text("App library", style = MaterialTheme.typography.headlineMedium)
         OutlinedTextField(query, { query = it }, singleLine = true, label = { Text("Search apps") },
             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
-        if (shown.isEmpty()) EmptyHint(if (vm.apps.isEmpty()) "No apps installed on the remote device yet." else "No match.")
+        if (settings.serverUrl.isBlank() || settings.token.isBlank()) NeedsServerCard(onOpenSettings)
+        else if (shown.isEmpty()) EmptyHint(if (vm.apps.isEmpty()) "No apps installed on the remote device yet." else "No match.")
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
             items(shown, key = { it.packageName }) { app ->
                 Card(Modifier.fillMaxWidth()) {
@@ -115,16 +116,19 @@ fun LibraryScreen(vm: AppViewModel, onLaunch: (String) -> Unit, onUpdate: () -> 
 
 /** SCREEN 4: add application. */
 @Composable
-fun AddScreen(vm: AppViewModel, onPick: (String) -> Unit) {
+fun AddScreen(vm: AppViewModel, onPick: (String) -> Unit, onOpenSettings: () -> Unit) {
     val job = vm.job
+    val settings = vm.settings.collectAsStateCompat()
+    val noServer = settings.serverUrl.isBlank() || settings.token.isBlank()
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Add application", style = MaterialTheme.typography.headlineMedium)
         Text("Pick an APK on your drive. The backend downloads it to the remote device and installs it there; nothing is installed on this phone.",
             color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (noServer) NeedsServerCard(onOpenSettings)
         for (p in PROVIDERS) {
             val connected = vm.providers[p]?.connected == true
-            Button(onClick = { onPick(p) }, enabled = connected, modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = { onPick(p) }, enabled = connected && !noServer, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Filled.CloudDownload, null)
                 Spacer(Modifier.width(8.dp))
                 Text(if (connected) "Select from ${providerName(p)}" else "${providerName(p)} not connected")
@@ -158,16 +162,30 @@ fun AddScreen(vm: AppViewModel, onPick: (String) -> Unit) {
     }
 }
 
+@Composable
+fun NeedsServerCard(onOpenSettings: () -> Unit) {
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("A server is needed to run apps", style = MaterialTheme.typography.titleMedium)
+            Text("TeraBox and MEGA work on their own. Installing and running Android apps needs a CloudDroid server " +
+                "(a Linux machine you set up, see documentation/DEPLOYMENT.md): it runs the Android device the apps live on.")
+            OutlinedButton(onClick = onOpenSettings) { Text("Add a server") }
+        }
+    }
+}
+
 /** SCREEN 5: cloud device. */
 @Composable
-fun DeviceScreen(vm: AppViewModel) {
+fun DeviceScreen(vm: AppViewModel, onOpenSettings: () -> Unit) {
     LaunchedEffect(Unit) { vm.refreshDevice() }
+    val settings = vm.settings.collectAsStateCompat()
     val d = vm.device
     var confirm by remember { mutableStateOf<String?>(null) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Cloud device", style = MaterialTheme.typography.headlineMedium)
-        if (d == null) { EmptyHint("No device information. Check the backend URL in Settings."); return@Column }
+        if (settings.serverUrl.isBlank() || settings.token.isBlank()) { NeedsServerCard(onOpenSettings); return@Column }
+        if (d == null) { EmptyHint("No device information. Check the server address in Settings."); return@Column }
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
