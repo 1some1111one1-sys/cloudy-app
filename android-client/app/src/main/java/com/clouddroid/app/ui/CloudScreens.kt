@@ -158,7 +158,8 @@ private fun vmErrorHint() {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BrowserScreen(vm: AppViewModel, provider: String, pickApk: Boolean, onBack: () -> Unit, onInstall: (String, String) -> Unit) {
+fun BrowserScreen(vm: AppViewModel, provider: String, pickApk: Boolean, onBack: () -> Unit, onInstall: (String, String) -> Unit,
+                  onStream: (CloudEntry) -> Unit = {}) {
     var path by remember { mutableStateOf("/") }
     var confirmDelete by remember { mutableStateOf<CloudEntry?>(null) }
     var newFolder by remember { mutableStateOf(false) }
@@ -208,6 +209,7 @@ fun BrowserScreen(vm: AppViewModel, provider: String, pickApk: Boolean, onBack: 
                         trailingContent = {
                             Row {
                                 if (isApk && !pickApk) TextButton(onClick = { onInstall(provider, e.path) }) { Text("Install") }
+                                if (!e.isDir && !pickApk && isStreamable(e.name)) IconButton(onClick = { onStream(e) }) { Icon(Icons.Filled.PlayArrow, "Play without downloading") }
                                 IconButton(onClick = { confirmDelete = e }) { Icon(Icons.Filled.Delete, "Delete") }
                             }
                         },
@@ -239,3 +241,6 @@ fun BrowserScreen(vm: AppViewModel, provider: String, pickApk: Boolean, onBack: 
         )
     }
 }
+
+private val STREAMABLE = setOf("mp4", "m4v", "mkv", "webm", "3gp", "mov", "mp3", "m4a", "aac", "flac", "ogg", "opus", "wav")
+fun isStreamable(name: String) = name.substringAfterLast('.', "").lowercase() in STREAMABLE

@@ -58,6 +58,16 @@ fun SettingsScreen(vm: AppViewModel, onOpenLibrary: () -> Unit) {
         SwitchRow("Adjust quality automatically", "Lower the quality when the network gets worse", s.autoQuality) { vm.setAuto(it) }
         SwitchRow("Audio", "Receive the remote device's sound", s.audioEnabled) { vm.setAudio(it) }
 
+        SectionTitle("Streaming cache (play from the drive without downloading)")
+        Text("Files you play from TeraBox or MEGA are read in pieces. Pieces are kept in memory (capped) and in this much cache space, oldest dropped first:",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (mb in listOf(256, 512, 1024, 2048)) FilterChip(
+                selected = s.streamDiskMb == mb, onClick = { vm.setStreamDiskMb(mb) },
+                label = { Text(if (mb >= 1024) "${mb / 1024} GB" else "$mb MB") })
+        }
+        OutlinedButton(onClick = { vm.clearStreamCache() }) { Text("Clear streaming cache") }
+
         SectionTitle("Cloud saving")
         SwitchRow("Automatic cloud saving", "Back up an app's data to your drive when you leave its session", s.autoBackup) { vm.setAutoBackup(it) }
 
@@ -77,6 +87,7 @@ fun SettingsScreen(vm: AppViewModel, onOpenLibrary: () -> Unit) {
         SectionTitle("Cache")
         Text("Temporary files on this phone: ${formatBytes(cacheBytes)}")
         OutlinedButton(onClick = {
+            com.clouddroid.app.stream.StreamHub.clear()
             context.cacheDir.listFiles()?.forEach { it.deleteRecursively() }
             cacheBytes = dirSize(context.cacheDir)
         }) { Text("Clear cache") }

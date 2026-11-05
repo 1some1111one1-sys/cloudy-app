@@ -89,6 +89,7 @@ public final class TestMain {
     public static void main(String[] args) {
         TestMega.runAll();
         TestTeraBox.runAll();
+        TestStream.runAll();
         System.out.println(passed + " checks passed, " + failed + " failed");
         System.exit(failed == 0 ? 0 : 1);
     }

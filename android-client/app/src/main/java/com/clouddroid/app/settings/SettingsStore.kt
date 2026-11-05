@@ -3,6 +3,7 @@ package com.clouddroid.app.settings
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -27,6 +28,8 @@ data class AppSettings(
     val autoBackup: Boolean = true,
     val pinned: Set<String> = emptySet(),
     val dataUsedBytes: Long = 0,
+    /** Disk space the streaming cache may use, in MB. */
+    val streamDiskMb: Int = 512,
 )
 
 class SettingsStore(private val context: Context) {
@@ -39,6 +42,7 @@ class SettingsStore(private val context: Context) {
         val autoBackup = booleanPreferencesKey("auto_backup")
         val pinned = stringSetPreferencesKey("pinned")
         val dataUsed = longPreferencesKey("data_used")
+        val streamDiskMb = intPreferencesKey("stream_disk_mb")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { p ->
@@ -52,6 +56,7 @@ class SettingsStore(private val context: Context) {
             autoBackup = p[Keys.autoBackup] ?: true,
             pinned = p[Keys.pinned] ?: emptySet(),
             dataUsedBytes = p[Keys.dataUsed] ?: 0L,
+            streamDiskMb = p[Keys.streamDiskMb] ?: 512,
         )
     }
 
@@ -74,5 +79,6 @@ class SettingsStore(private val context: Context) {
         it[Keys.dataUsed] = (it[Keys.dataUsed] ?: 0L) + bytes.coerceAtLeast(0)
     }
 
+    suspend fun setStreamDiskMb(mb: Int) = context.dataStore.edit { it[Keys.streamDiskMb] = mb }
     suspend fun resetDataUsed() = context.dataStore.edit { it[Keys.dataUsed] = 0L }
 }

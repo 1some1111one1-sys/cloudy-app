@@ -12,6 +12,8 @@ import androidx.lifecycle.viewModelScope
 import com.clouddroid.app.cloud.BackendApi
 import com.clouddroid.app.cloud.BackendException
 import com.clouddroid.app.cloud.LocalCloud
+import com.clouddroid.app.core.RemoteFile
+import com.clouddroid.app.stream.StreamHub
 import com.clouddroid.app.device.*
 import com.clouddroid.app.settings.AppSettings
 import com.clouddroid.app.settings.SettingsStore
@@ -44,6 +46,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // file browser
     var browseEntries by mutableStateOf<List<CloudEntry>>(emptyList())
     var browseLoading by mutableStateOf(false)
+
+    // streaming a file from the drive without downloading it
+    var streamProvider by mutableStateOf("")
+    var streamEntry by mutableStateOf<CloudEntry?>(null)
+    suspend fun openRemote(): RemoteFile {
+        val e = streamEntry ?: throw IllegalStateException("No file chosen")
+        return cloud.openRemote(streamProvider, e.path, e.size, settings.value.streamDiskMb)
+    }
+    fun streamFile(provider: String, entry: CloudEntry) { streamProvider = provider; streamEntry = entry }
+    fun setStreamDiskMb(mb: Int) = viewModelScope.launch { store.setStreamDiskMb(mb) }
+    fun clearStreamCache() { StreamHub.clear() }
 
     // install
     var job by mutableStateOf<InstallJob?>(null)

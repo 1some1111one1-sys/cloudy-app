@@ -246,9 +246,14 @@ final class MegaCrypto {
 
     /** AES-CTR for file data; the counter block is the 64-bit nonce followed by a 64-bit block counter. */
     static Cipher ctr(int[] aesKey, int[] nonce) {
+        return ctrAt(aesKey, nonce, 0);
+    }
+
+    /** Same, positioned at 16-byte block number {@code block}, to decrypt from the middle of a file. */
+    static Cipher ctrAt(int[] aesKey, int[] nonce, long block) {
         try {
             Cipher c = Cipher.getInstance("AES/CTR/NoPadding");
-            byte[] iv = a32ToBytes(new int[]{nonce[0], nonce[1], 0, 0});
+            byte[] iv = a32ToBytes(new int[]{nonce[0], nonce[1], (int) (block >>> 32), (int) block});
             c.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(a32ToBytes(aesKey), "AES"), new javax.crypto.spec.IvParameterSpec(iv));
             return c;
         } catch (GeneralSecurityException e) {

@@ -48,7 +48,7 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
-            AnimatedVisibility(visible = !fullscreen && !route.startsWith("browse")) {
+            AnimatedVisibility(visible = !fullscreen && !route.startsWith("browse") && route != "stream") {
                 NavigationBar {
                     for (t in TABS) NavigationBarItem(
                         selected = route == t.route || (t.route == "library" && route == "add"),
@@ -91,11 +91,13 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
                 val pick = e.arguments?.getBoolean("pick") ?: false
                 BrowserScreen(vm, provider, pick,
                     onBack = { nav.popBackStack() },
+                    onStream = { entry -> vm.streamFile(provider, entry); nav.navigate("stream") },
                     onInstall = { p, path ->
                         vm.install(p, path)
                         nav.navigate("add") { popUpTo("add") { inclusive = true } }
                     })
             }
+            composable("stream") { StreamScreen(vm, onExit = { nav.popBackStack() }) }
             composable(
                 "player/{pkg}",
                 arguments = listOf(navArgument("pkg") { type = NavType.StringType }),

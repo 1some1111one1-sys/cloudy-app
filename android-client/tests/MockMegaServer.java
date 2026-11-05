@@ -22,6 +22,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /** In-memory imitation of MEGA's API and storage servers (stores only what a real server would see: ciphertext). */
 final class MockMegaServer {
+    /** Bytes of file data sent from /dl/ (to check that streaming fetches only what it reads). */
+    final java.util.concurrent.atomic.AtomicLong dataServed = new java.util.concurrent.atomic.AtomicLong();
+
     static final String EMAIL = "me@example.com";
     static final String PASSWORD = "pässw0rd!";
     static final String USER = "USERHANDLE1";
@@ -226,14 +229,25 @@ final class MockMegaServer {
             if (path.equals("/cs")) {
                 cs(ex, new String(body, StandardCharsets.UTF_8));
             } else if (path.startsWith("/dl/")) {
-                N n = nodes.get(path.substring(4));
+                String rest = path.substring(4);
+                int slash = rest.indexOf('/');
+                N n = nodes.get(slash < 0 ? rest : rest.substring(0, slash));
                 if (n == null || n.data == null) {
                     ex.sendResponseHeaders(404, -1);
                 } else {
-                    ex.sendResponseHeaders(200, n.data.length == 0 ? -1 : n.data.length);
-                    if (n.data.length > 0) {
+                    // like the real storage servers: "/<first>-<last>" (inclusive) asks for part of the file
+                    int from = 0, to = n.data.length - 1;
+                    if (slash >= 0) {
+                        String[] r = rest.substring(slash + 1).split("-");
+                        from = Integer.parseInt(r[0]);
+                        to = Math.min(Integer.parseInt(r[1]), n.data.length - 1);
+                    }
+                    byte[] part = n.data.length == 0 ? n.data : Arrays.copyOfRange(n.data, from, to + 1);
+                    dataServed.addAndGet(part.length);
+                    ex.sendResponseHeaders(200, part.length == 0 ? -1 : part.length);
+                    if (part.length > 0) {
                         try (OutputStream o = ex.getResponseBody()) {
-                            o.write(n.data);
+                            o.write(part);
                         }
                     }
                 }

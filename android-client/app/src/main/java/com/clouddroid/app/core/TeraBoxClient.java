@@ -224,6 +224,115 @@ public final class TeraBoxClient implements CloudClient {
         throw new CloudException(502, msg.toString());
     }
 
+    // ---------------------------------------------------------------- partial reads
+
+    private final Map<String, Object[]> dlinks = new ConcurrentHashMap<>();
+    private static final long DLINK_TTL_MS = 5 * 60_000L;
+
+    /** The temporary download address of a file (kept a few minutes so a stream asks once, not for every block). */
+    private String dlink(String p, boolean fresh) throws IOException {
+        Object[] c = fresh ? null : dlinks.get(p);
+        if (c != null && (Long) c[1] > System.currentTimeMillis()) return (String) c[0];
+        Map<String, Object> m = apiGet("filemetas", "&target=" + enc("[" + Json.quote(p) + "]") + "&dlink=1", "Streaming");
+        List<Object> info = Json.list(m, "info");
+        String link = info.isEmpty() || !(info.get(0) instanceof Map) ? null : Json.str(asMap(info.get(0)), "dlink");
+        if (link == null) return null;
+        dlinks.put(p, new Object[]{link, System.currentTimeMillis() + DLINK_TTL_MS});
+        return link;
+    }
+
+    /**
+     * Reads one range of a file with an HTTP Range request, so the rest of the file is never downloaded.
+     * Fails clearly if TeraBox's file server ignores Range (it would otherwise send the whole file for every block).
+     */
+    @Override
+    public int readRange(String path, long offset, byte[] out, int len) throws IOException {
+        String p = Paths.normalize(path);
+        Entry e = find(p);
+        if (e.dir) throw new CloudException(400, "\"" + Paths.name(p) + "\" is a folder");
+        if (offset < 0 || len <= 0 || offset >= e.size) return 0;
+        int want = (int) (Math.min(e.size, offset + len) - offset);
+        List<String> failures = new ArrayList<>();
+        String link = null;
+        try {
+            link = dlink(p, false);
+            if (link == null) failures.add("TeraBox gave no download address");
+        } catch (CloudException ce) {
+            throw ce;
+        } catch (IOException ex) {
+            failures.add(ex.getMessage());
+        }
+        if (link != null) {
+            String err = rangeFetch(link, offset, want, out);
+            if (err == null) return want;
+            failures.add(err);
+            dlinks.remove(p);
+            try {
+                String again = dlink(p, true);                    // the address may have expired
+                if (again != null && !again.equals(link)) {
+                    err = rangeFetch(again, offset, want, out);
+                    if (err == null) return want;
+                    failures.add(err);
+                }
+            } catch (CloudException ce) {
+                throw ce;
+            } catch (IOException ex) {
+                failures.add(ex.getMessage());
+            }
+        }
+        String err = rangeFetch(base() + "/rest/2.0/pcs/file?method=download&app_id=" + APP_ID + "&path=" + enc(p), offset, want, out);
+        if (err == null) return want;
+        failures.add(err);
+        StringBuilder msg = new StringBuilder("Streaming \"").append(Paths.name(p)).append("\" failed: ");
+        for (int i = 0; i < failures.size(); i++) msg.append(i == 0 ? "" : "; ").append(failures.get(i));
+        throw new CloudException(502, msg.toString());
+    }
+
+    /** One ranged GET into out. Returns null on success, otherwise a short description of what went wrong. */
+    private String rangeFetch(String url, long offset, int want, byte[] out) throws IOException {
+        String current = url;
+        for (int hop = 0; hop < 6; hop++) {
+            HttpTransport.Request req = new HttpTransport.Request("GET", current);
+            req.header("User-Agent", UA);
+            req.header("Referer", site + "/main?category=all");
+            req.header("Origin", site);
+            req.header("Range", "bytes=" + offset + "-" + (offset + want - 1));
+            if (sameFamily(current)) req.header("Cookie", cookie);
+            String host = URI.create(current).getHost();
+            HttpTransport.Response r;
+            try {
+                r = http.execute(req);
+            } catch (CloudException ce) {
+                throw ce;
+            } catch (IOException ex) {
+                return host + ": " + ex.getMessage();
+            }
+            try {
+                String location = r.header("location");
+                if ((r.code == 301 || r.code == 302 || r.code == 307 || r.code == 308) && location != null) {
+                    current = URI.create(current).resolve(location).toString();
+                    continue;
+                }
+                if (r.code == 200 && offset > 0) return host + ": the server ignored the Range request (sent the whole file)";
+                if (r.code != 200 && r.code != 206) return host + ": HTTP " + r.code;
+                String type = r.header("content-type");
+                if (type != null && (type.startsWith("text/") || type.contains("json"))) {
+                    return host + ": got a page instead of file data (" + type + ")";
+                }
+                InputStream in = r.stream();
+                int got = 0, k;
+                while (got < want && (k = in.read(out, got, want - got)) > 0) got += k;
+                if (got != want) return host + ": got " + got + " bytes instead of " + want;
+                return null;
+            } catch (IOException ex) {
+                return host + ": " + ex.getMessage();
+            } finally {
+                r.close();
+            }
+        }
+        return "too many redirects";
+    }
+
     /**
      * Downloads one address into dest. Returns null when the file arrived whole, otherwise a short description of
      * what went wrong (a server that answers an error page with HTTP 200 must not end up saved as the photo).

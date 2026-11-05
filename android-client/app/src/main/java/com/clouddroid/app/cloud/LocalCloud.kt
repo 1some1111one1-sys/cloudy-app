@@ -4,6 +4,8 @@ import android.content.Context
 import android.net.Uri
 import com.clouddroid.app.core.CloudClient
 import com.clouddroid.app.core.CloudException
+import com.clouddroid.app.core.RemoteFile
+import com.clouddroid.app.stream.StreamHub
 import com.clouddroid.app.core.MegaClient
 import com.clouddroid.app.core.Paths
 import com.clouddroid.app.core.TeraBoxClient
@@ -107,6 +109,11 @@ class LocalCloud(private val context: Context) {
         client(provider).list(Paths.normalize(path)).map {
             CloudEntry(it.path, it.name(), it.dir, if (it.dir) 0 else it.size.coerceAtLeast(0))
         }
+    }
+
+    /** A file read on demand from the drive (only the parts that are read are fetched). */
+    suspend fun openRemote(provider: String, path: String, size: Long, diskMb: Int): RemoteFile = io(provider) {
+        StreamHub.open(context, client(provider), provider, Paths.normalize(path), size, diskMb)
     }
 
     suspend fun mkdir(provider: String, path: String) = io(provider) { client(provider).mkdir(Paths.normalize(path)) }

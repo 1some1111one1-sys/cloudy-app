@@ -21,6 +21,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /** In-memory imitation of the TeraBox website's JSON endpoints (as far as CloudBridge uses them). */
 final class MockTeraBoxServer {
+    /** Bytes of file data sent, and a switch that makes the file server ignore Range (as a misbehaving one might). */
+    final java.util.concurrent.atomic.AtomicLong dataServed = new java.util.concurrent.atomic.AtomicLong();
+    volatile boolean ignoreRange;
+
     static final String COOKIE = "ndus=GOODSESSION; PANWEB=1";
     static final String BDSTOKEN = "BDS1234567890";
     static final String JSTOKEN = "ABCDEF0123456789ABCDEF0123456789";
@@ -257,10 +261,21 @@ final class MockTeraBoxServer {
         synchronized (files) {
             for (F f : files.values()) {
                 if (String.valueOf(f.fsId).equals(fsId)) {
-                    ex.sendResponseHeaders(200, f.data.length == 0 ? -1 : f.data.length);
-                    if (f.data.length > 0) {
+                    byte[] body = f.data;
+                    int code = 200;
+                    String range = ex.getRequestHeaders().getFirst("Range");
+                    if (range != null && !ignoreRange && f.data.length > 0) {
+                        String[] r = range.substring("bytes=".length()).split("-");
+                        int from = Integer.parseInt(r[0]);
+                        int to = Math.min(Integer.parseInt(r[1]), f.data.length - 1);
+                        body = java.util.Arrays.copyOfRange(f.data, from, to + 1);
+                        code = 206;
+                    }
+                    dataServed.addAndGet(body.length);
+                    ex.sendResponseHeaders(code, body.length == 0 ? -1 : body.length);
+                    if (body.length > 0) {
                         try (OutputStream o = ex.getResponseBody()) {
-                            o.write(f.data);
+                            o.write(body);
                         }
                     }
                     return;

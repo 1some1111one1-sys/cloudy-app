@@ -13,6 +13,17 @@ Install the APK and use **TeraBox and MEGA right away**: sign in to MEGA with e-
 code if your account has two-factor), sign in to TeraBox on TeraBox's own website inside the app. Browse, upload from
 the phone, create folders and delete, all directly between the phone and the drive. No URL, no token.
 
+## Play files from the drive without downloading them (on the phone, RAM + cache only)
+In the Cloud tab, audio and video files get a play button. The file is **not downloaded**: the app asks the drive for
+the parts being played (HTTP range requests; for MEGA the ranges are decrypted on the phone), keeps recent pieces in a
+capped amount of memory (at most 64 MB) and a capped amount of cache space (256 MB to 2 GB, your choice), and drops the
+oldest pieces first. Seeking jumps straight to the wanted part. Under the hood this is a general read-on-demand file
+(`core/RemoteFile`, `core/BlockCache`, and an Android proxy file descriptor in `stream/StreamHub.kt`).
+
+**This is not "run an app from the drive".** Android only runs apps that are installed, and nothing in this project
+runs another app's code on your phone. See `documentation/STATUS.md` ("Running apps on the phone") for why, and for what
+it would take.
+
 ## What needs a server
 **Installing and running Android apps** needs your own CloudDroid server: a Linux machine with KVM that runs the
 backend and the Android emulator. Nothing else can provide a remote Android device. Add it later in Settings

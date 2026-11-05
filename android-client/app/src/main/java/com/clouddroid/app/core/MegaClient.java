@@ -232,6 +232,58 @@ public final class MegaClient implements CloudClient {
         finish(part, dest);
     }
 
+    // ---------------------------------------------------------------- partial reads
+
+    /** Download addresses stay valid for hours; keep each for a few minutes so a stream makes one API call, not one per block. */
+    private final Map<String, Object[]> streamUrls = new ConcurrentHashMap<>();
+    private static final long STREAM_URL_TTL_MS = 5 * 60_000L;
+
+    private String streamUrl(Node n, boolean fresh) throws IOException {
+        Object[] c = fresh ? null : streamUrls.get(n.handle);
+        if (c != null && (Long) c[1] > System.currentTimeMillis()) return (String) c[0];
+        Object g = api("{\"a\":\"g\",\"g\":1,\"ssl\":1,\"n\":" + Json.quote(n.handle) + "}", true, "Streaming");
+        String url = g instanceof Map ? Json.str(asMap(g), "g") : null;
+        if (url == null) throw new CloudException(502, "MEGA did not give a download address for \"" + n.display() + "\"");
+        streamUrls.put(n.handle, new Object[]{url, System.currentTimeMillis() + STREAM_URL_TTL_MS});
+        return url;
+    }
+
+    /**
+     * Reads one range of a file straight from MEGA's storage server (it accepts "url/first-last") and decrypts it
+     * here. MEGA's whole-file checksum cannot be checked on a part, so unlike {@link #download} this does not verify it.
+     */
+    @Override
+    public int readRange(String path, long offset, byte[] out, int len) throws IOException {
+        Session s = tree();
+        Node n;
+        synchronized (s) {
+            n = resolve(s, Paths.normalize(path));
+        }
+        if (n.dir()) throw new CloudException(400, "\"" + n.display() + "\" is a folder");
+        if (offset < 0 || len <= 0 || offset >= n.size) return 0;
+        long end = Math.min(n.size, offset + len);                  // exclusive
+        long start = offset & ~15L;                                 // the cipher works on 16-byte blocks
+        int skip = (int) (offset - start);
+        int total = (int) (end - start);
+        byte[] enc = new byte[total];
+        for (int attempt = 0; ; attempt++) {
+            HttpTransport.Response r = null;
+            try {
+                r = fetch(streamUrl(n, attempt > 0) + "/" + start + "-" + (end - 1));
+                readFully(r.stream(), enc, total);
+                break;
+            } catch (IOException e) {
+                if (attempt >= 1) throw e;                          // one retry with a new address (the old one may have expired)
+            } finally {
+                if (r != null) r.close();
+            }
+        }
+        byte[] plain = MegaCrypto.ctrAt(n.aes, n.nonce, start / 16).update(enc, 0, total);
+        int got = total - skip;
+        System.arraycopy(plain, skip, out, 0, got);
+        return got;
+    }
+
     @Override
     public void upload(String path, File src, String mime) throws IOException {
         String p = Paths.normalize(path);
@@ -757,7 +809,7 @@ public final class MegaClient implements CloudClient {
                 current = URI.create(current).resolve(location).toString();
                 continue;
             }
-            if (r.code != 200) {
+            if (r.code != 200 && r.code != 206) {
                 int code = r.code;
                 r.close();
                 throw new CloudException(code, "Downloading failed: MEGA's storage server answered HTTP " + code);

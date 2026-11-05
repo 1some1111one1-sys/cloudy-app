@@ -14,6 +14,14 @@ public interface CloudClient {
 
     void download(String path, File dest) throws IOException;
 
+    /**
+     * Reads up to {@code len} bytes starting at {@code offset} into {@code out} without downloading the rest of the
+     * file. Returns the number of bytes read (fewer than asked only at the end of the file, 0 at or past it).
+     */
+    default int readRange(String path, long offset, byte[] out, int len) throws IOException {
+        throw new CloudException(501, "This cloud service does not support reading part of a file");
+    }
+
     void upload(String path, File src, String mime) throws IOException;
 
     void mkdir(String path) throws IOException;
