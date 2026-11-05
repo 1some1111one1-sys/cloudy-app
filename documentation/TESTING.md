@@ -16,7 +16,7 @@
 The Android app is compiled in CI (debug and release). It has no automated UI tests.
 
 ## Also automated in CI: on-phone MEGA and TeraBox clients
-`android-client/tests` (182 checks: MEGA login v1/v2, 2FA, sessions, browse, upload, download, TeraBox listing, upload, errors) run on every build against in-process imitations. Run locally: `javac -d out --release 17 android-client/app/src/main/java/com/clouddroid/app/core/*.java android-client/tests/*.java && java -cp out com.clouddroid.app.core.TestMain`
+`android-client/tests` (253 checks: MEGA login v1/v2, 2FA, sessions, browse, upload, download, TeraBox listing, upload, errors, range reads, block cache limits, read-ahead) run on every build against in-process imitations. Run locally: `javac -d out --release 17 android-client/app/src/main/java/com/clouddroid/app/core/*.java android-client/tests/*.java && java -cp out com.clouddroid.app.core.TestMain`
 
 ## NOT automated, and not yet verified by anyone
 These need a KVM server, a phone and real accounts. Do them in this order after deployment:

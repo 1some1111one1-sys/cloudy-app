@@ -25,6 +25,7 @@ import kotlinx.coroutines.withContext
  * Plays a video or audio file straight from TeraBox / MEGA without saving it on the phone. Only the parts being
  * played (and a few blocks ahead) are fetched; memory and cache use are capped (Settings → Streaming cache).
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StreamScreen(vm: AppViewModel, onExit: () -> Unit) {
     val context = LocalContext.current
