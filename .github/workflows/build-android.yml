@@ -32,7 +32,7 @@ jobs:
 
       - name: Install Android platform and build tools
         run: |
-          sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+          sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "platform-tools" "ndk;29.0.13846066"
           yes | sdkmanager --licenses
 
       - uses: gradle/actions/setup-gradle@v4

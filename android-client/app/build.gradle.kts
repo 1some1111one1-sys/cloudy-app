@@ -11,8 +11,9 @@ android {
 
     defaultConfig {
         applicationId = "com.clouddroid.app"
-        minSdk = 29 // Android 10
-        targetSdk = 35
+        minSdk = 28 // Android 9
+        // The virtualization engine needs the host app to target API 28 (it relies on behaviour newer targets removed).
+        targetSdk = 28
         versionCode = 1
         versionName = "0.1.0"
     }
@@ -60,6 +61,7 @@ android {
 
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
+    implementation(project(":Bcore"))
     implementation(composeBom)
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
