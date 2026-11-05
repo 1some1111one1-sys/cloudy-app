@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -20,7 +21,8 @@
         android:label="CloudDroid"
         android:supportsRtl="true"
         android:theme="@style/Theme.CloudDroid"
-        android:usesCleartextTraffic="false">
+        tools:replace="android:usesCleartextTraffic"
+        android:usesCleartextTraffic="true">  <!-- apps run inside CloudDroid need it; CloudDroid itself only uses https -->
 
         <receiver
             android:name=".local.InstallResultReceiver"
