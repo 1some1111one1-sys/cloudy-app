@@ -8,6 +8,21 @@ backups go to, your **TeraBox** or **MEGA** drive.
 > full chain (emulator, WebRTC stream, real TeraBox / MEGA accounts) has not been run together yet.
 > Read `documentation/STATUS.md` for exactly what has and has not been verified.
 
+## Run APKs INSIDE CloudDroid (no Android install, no server) - experimental
+CloudDroid embeds a virtualization engine (NewBlackbox, Apache-2.0, vendored in `android-client/engine/`). In the Add tab
+(default "Run inside CloudDroid") pick a single `.apk` on your drive; it is streamed into the engine and the app then
+runs inside CloudDroid's own processes. It does not appear in Android's app list.
+- **Storage is the drive:** *Save & free space* zips the app's data (readable here because the app lives inside
+  CloudDroid) to `/CloudDroid/data/<package>/` and removes the app and its data from the phone. *Run* brings the app back
+  (APK + latest saved data) when it is not on the phone.
+- **Honest limits:** the engine uses hidden Android APIs and native hooks, so it can fail on some Android versions or
+  vendors. Many apps refuse to run in it (games with anti-tamper, banking, Google Play services apps, some online
+  games). Only single `.apk` files work (not `.xapk` / `.apks` / split bundles). The release build is 64-bit only.
+  While an app runs it needs its APK and data on the phone (in CloudDroid's private storage): the drive is the
+  permanent store, the phone holds what is in use. Apps are not streamed block by block while running.
+- **Side effects of embedding it:** CloudDroid now targets Android API 28 and allows cleartext traffic (guest apps need
+  both); release lint checks are off because of the vendored code.
+
 ## Apps on this phone, saved on your drive (no server)
 - **App library** lists the apps installed on this phone. They run on the phone, with its own RAM and cache. Open and
   uninstall work as usual.

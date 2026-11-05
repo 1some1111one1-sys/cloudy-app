@@ -15,14 +15,17 @@
 | Streaming a drive file on the phone without downloading it (range reads, capped RAM + disk cache, proxy file descriptor, in-app player) | written | range reads, cache limits, read-ahead and concurrency: 71 checks in CI against imitations of MEGA and TeraBox. The Android player (MediaPlayer on the proxy descriptor) compiles but was NEVER run on a phone. Whether the real MEGA and TeraBox file servers honour range requests as the imitations do is UNVERIFIED (MEGA's `url/first-last` form is what its own SDK uses; TeraBox's Range support is assumed). |
 | Phone app library, Save app (APK + splits to the drive), Install from the drive via PackageInstaller (streamed, no server) | written | compiles in CI. NEVER run on a phone: the installer session, the confirmation flow, the "allow installs" screen and Android 14+ behaviour are untested. |
 | Save / Restore app data (user-picked folder, zip via cache) | written | the zip packing/unpacking and the refusal of `../` names have tests (CI); the folder access (Storage Access Framework) and upload are untested on a phone. Cannot save private app data (needs root). |
-| Running another app's code on the phone from the drive | NOT implemented | see below |
+| Run APKs inside CloudDroid (embedded NewBlackbox engine), streamed add from the drive, save data to the drive + free space, bring back on run | written, builds | the engine and its native library compile in CI (debug + release APK); my wrapper code compiles. NEVER run, not even once: whether it starts, installs or runs any given app on your phone is unknown. |
 | Audio | NOT implemented | emulator runs with -no-audio |
 | Multi-touch / low-latency input | NOT implemented | single touch via `adb shell input` |
 | Multi-user | schema only | API uses one shared token |
 | Release APK | built by CI | signature checked in CI; throwaway key unless you add secrets |
 
-## Running apps on the phone without installing them
-Not built (apps are installed normally from the drive, then run by Android). What exists is the storage half (read a file on demand, bounded memory and cache). The execution half is a
+## Running apps inside CloudDroid (without installing them in Android)
+Built by embedding an existing open-source engine; untested at runtime (see table). What it does not do: stream the app
+block by block while it runs. The engine needs the APK as a file and the app's data as files, so a running app uses
+CloudDroid's private storage; the drive is the permanent copy and the phone holds what is in use.
+Why an engine and not "just run it": What exists is the storage half (read a file on demand, bounded memory and cache). The execution half is a
 different and much larger problem:
 - Android runs only installed apps. Running a guest APK without installing it means an app-virtualization container
   (what VirtualApp / BlackBox-style engines do): intercepting the system's package and activity services, loading the
