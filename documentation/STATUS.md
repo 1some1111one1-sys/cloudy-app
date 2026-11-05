@@ -5,7 +5,7 @@
 | Area | State | Verified how |
 |---|---|---|
 | Android app: Home, Cloud, Library, Add, Device, Player, Settings | written | compiles in GitHub Actions (debug + release APK). Never run on a phone. |
-| On-phone TeraBox (web sign-in) and MEGA (e-mail + password, 2FA) - no server needed | written | clients ported from the `cloudmemory` repo; 253 checks run in CI against in-process imitations of both services. NEVER run against real TeraBox or MEGA. |
+| On-phone TeraBox (web sign-in) and MEGA (e-mail + password, 2FA) - no server needed | written | clients ported from the `cloudmemory` repo; 262 checks run in CI against in-process imitations of both services. NEVER run against real TeraBox or MEGA. |
 | Server-side MEGA (MEGAcmd) and TeraBox (for the server to download APKs) | written | parsers tested on sample text; never run against MEGA |
 | Backend REST + WebSocket (FastAPI) | written | syntax-checked only: FastAPI could not be installed here |
 | Backend services (install, apps, backup, storage, ABR, input) | written | 33 unit tests pass |
@@ -13,14 +13,16 @@
 | Android emulator control (adb, lifecycle, persistent AVD) | written | tested with a simulated device; no KVM here |
 | WebRTC streaming (aiortc capture/encode, Android decode) | written | not run: needs emulator, aiortc, a phone |
 | Streaming a drive file on the phone without downloading it (range reads, capped RAM + disk cache, proxy file descriptor, in-app player) | written | range reads, cache limits, read-ahead and concurrency: 71 checks in CI against imitations of MEGA and TeraBox. The Android player (MediaPlayer on the proxy descriptor) compiles but was NEVER run on a phone. Whether the real MEGA and TeraBox file servers honour range requests as the imitations do is UNVERIFIED (MEGA's `url/first-last` form is what its own SDK uses; TeraBox's Range support is assumed). |
+| Phone app library, Save app (APK + splits to the drive), Install from the drive via PackageInstaller (streamed, no server) | written | compiles in CI. NEVER run on a phone: the installer session, the confirmation flow, the "allow installs" screen and Android 14+ behaviour are untested. |
+| Save / Restore app data (user-picked folder, zip via cache) | written | the zip packing/unpacking and the refusal of `../` names have tests (CI); the folder access (Storage Access Framework) and upload are untested on a phone. Cannot save private app data (needs root). |
 | Running another app's code on the phone from the drive | NOT implemented | see below |
 | Audio | NOT implemented | emulator runs with -no-audio |
 | Multi-touch / low-latency input | NOT implemented | single touch via `adb shell input` |
 | Multi-user | schema only | API uses one shared token |
 | Release APK | built by CI | signature checked in CI; throwaway key unless you add secrets |
 
-## Running apps on the phone ("without installing", from the drive, RAM and cache only)
-Not built. What exists is the storage half (read a file on demand, bounded memory and cache). The execution half is a
+## Running apps on the phone without installing them
+Not built (apps are installed normally from the drive, then run by Android). What exists is the storage half (read a file on demand, bounded memory and cache). The execution half is a
 different and much larger problem:
 - Android runs only installed apps. Running a guest APK without installing it means an app-virtualization container
   (what VirtualApp / BlackBox-style engines do): intercepting the system's package and activity services, loading the

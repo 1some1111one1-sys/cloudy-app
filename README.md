@@ -8,6 +8,19 @@ backups go to, your **TeraBox** or **MEGA** drive.
 > full chain (emulator, WebRTC stream, real TeraBox / MEGA accounts) has not been run together yet.
 > Read `documentation/STATUS.md` for exactly what has and has not been verified.
 
+## Apps on this phone, saved on your drive (no server)
+- **App library** lists the apps installed on this phone. They run on the phone, with its own RAM and cache. Open and
+  uninstall work as usual.
+- **Save app** copies an app's APK file(s) (base + splits) to `/CloudDroid/apps/<package>/<version>/` on TeraBox or MEGA.
+- **Add tab → Install** brings a saved app (or any APK you choose on the drive) back: the APK is read from the drive
+  piece by piece straight into Android's installer, not stored in the app's storage. Android asks you to confirm, and
+  the first time you must allow CloudDroid to install apps (Android shows the settings screen).
+- **Save data / Restore data** zips a folder **you choose** (once per app) into `/CloudDroid/data/<package>/` and restores
+  it later. **Limit:** Android does not let one app read another app's private data (`/data/data`, `Android/data`),
+  and games' main data usually lives there. Only data in folders Android lets you pick (for example a save folder in
+  shared storage) can be saved; the rest needs a rooted phone. Uninstalling an app deletes its private data for good.
+- Updating an app from a different signing key than the installed one is refused by Android.
+
 ## What works without a server
 Install the APK and use **TeraBox and MEGA right away**: sign in to MEGA with e-mail and password (plus the 6-digit
 code if your account has two-factor), sign in to TeraBox on TeraBox's own website inside the app. Browse, upload from
@@ -24,10 +37,10 @@ oldest pieces first. Seeking jumps straight to the wanted part. Under the hood t
 runs another app's code on your phone. See `documentation/STATUS.md` ("Running apps on the phone") for why, and for what
 it would take.
 
-## What needs a server
-**Installing and running Android apps** needs your own CloudDroid server: a Linux machine with KVM that runs the
-backend and the Android emulator. Nothing else can provide a remote Android device. Add it later in Settings
-("Remote device server", optional). See `documentation/DEPLOYMENT.md`.
+## What needs a server (optional)
+Only the **remote device** mode: running apps on a separate Android device in the cloud and streaming its screen. It
+needs your own Linux machine with KVM running the backend and an emulator. Add it in Settings ("Remote device server").
+See `documentation/DEPLOYMENT.md`.
 
 ## Layout
 ```
