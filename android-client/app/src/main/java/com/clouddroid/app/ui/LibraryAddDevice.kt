@@ -25,7 +25,7 @@ fun LibraryScreen(vm: AppViewModel, onLaunch: (String) -> Unit, onUpdate: () -> 
     var restoreFor by remember { mutableStateOf<InstalledApp?>(null) }
     var query by remember { mutableStateOf("") }
     val hasServer = settings.serverUrl.isNotBlank() && settings.token.isNotBlank()
-    var mode by remember { mutableStateOf("phone") }
+    var mode by remember { mutableStateOf("virtual") }
 
     val shown = vm.apps
         .filter { query.isBlank() || it.label.contains(query, true) || it.packageName.contains(query, true) }
@@ -36,10 +36,12 @@ fun LibraryScreen(vm: AppViewModel, onLaunch: (String) -> Unit, onUpdate: () -> 
         Text("App library", style = MaterialTheme.typography.headlineMedium)
         OutlinedTextField(query, { query = it }, singleLine = true, label = { Text("Search apps") },
             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
-        if (hasServer) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = mode == "phone", onClick = { mode = "phone" }, label = { Text("This phone") })
-            FilterChip(selected = mode == "server", onClick = { mode = "server" }, label = { Text("Remote device") })
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = mode == "virtual", onClick = { mode = "virtual" }, label = { Text("Inside CloudDroid") })
+            FilterChip(selected = mode == "phone", onClick = { mode = "phone" }, label = { Text("Installed on phone") })
+            if (hasServer) FilterChip(selected = mode == "server", onClick = { mode = "server" }, label = { Text("Remote device") })
         }
+        if (mode == "virtual") { VirtualLibrary(vm, query); return@Column }
         if (!hasServer || mode == "phone") { PhoneLibrary(vm, query); return@Column }
         if (shown.isEmpty()) EmptyHint(if (vm.apps.isEmpty()) "No apps installed on the remote device yet." else "No match.")
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
@@ -126,17 +128,21 @@ fun AddScreen(vm: AppViewModel, onPick: (String) -> Unit, onOpenSettings: () -> 
     val job = vm.job
     val settings = vm.settings.collectAsStateCompat()
     val hasServer = settings.serverUrl.isNotBlank() && settings.token.isNotBlank()
-    val onPhone = !hasServer || vm.installTarget == "phone"
+    val target = if (vm.installTarget == "server" && !hasServer) "virtual" else vm.installTarget
+    val onPhone = target != "server"
     LaunchedEffect(Unit) { vm.refreshProvidersAsync(); vm.loadSavedApps() }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Add application", style = MaterialTheme.typography.headlineMedium)
-        Text(if (onPhone) "Install an app on this phone from your drive. The APK is read from TeraBox or MEGA piece by piece and handed to Android's installer; it is not kept in this app's storage. Android asks you to confirm."
-        else "Pick an APK on your drive. Your server downloads it to the remote device and installs it there.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (hasServer) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = onPhone, onClick = { vm.installTarget = "phone" }, label = { Text("Install on this phone") })
-            FilterChip(selected = !onPhone, onClick = { vm.installTarget = "server" }, label = { Text("Install on remote device") })
+        Text(when (target) {
+            "virtual" -> "Run an app INSIDE CloudDroid without installing it in Android. The APK is streamed from your drive (a single .apk file) into CloudDroid's engine; its data stays inside CloudDroid and can be saved back to the drive to free space. Experimental: some apps cannot run this way."
+            "phone" -> "Install an app on this phone from your drive. The APK is read from TeraBox or MEGA piece by piece and handed to Android's installer. Android asks you to confirm."
+            else -> "Pick an APK on your drive. Your server downloads it to the remote device and installs it there."
+        }, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = target == "virtual", onClick = { vm.installTarget = "virtual" }, label = { Text("Run inside CloudDroid") })
+            FilterChip(selected = target == "phone", onClick = { vm.installTarget = "phone" }, label = { Text("Install on phone") })
+            if (hasServer) FilterChip(selected = target == "server", onClick = { vm.installTarget = "server" }, label = { Text("Remote device") })
         }
         BusyCard(vm)
         for (p in PROVIDERS) {
@@ -163,7 +169,8 @@ fun AddScreen(vm: AppViewModel, onPick: (String) -> Unit, onOpenSettings: () -> 
                                 if (saved.apks.size > 1) " · ${saved.apks.size} parts" else "",
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        FilledTonalButton(onClick = { vm.installSaved(p, saved) }) { Text("Install") }
+                        if (target == "virtual") FilledTonalButton(onClick = { vm.addSavedVirtual(p, saved) }) { Text("Add") }
+                        else FilledTonalButton(onClick = { vm.installSaved(p, saved) }) { Text("Install") }
                     }
                 }
             }

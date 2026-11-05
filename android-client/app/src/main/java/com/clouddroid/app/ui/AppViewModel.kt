@@ -17,6 +17,8 @@ import com.clouddroid.app.local.InstallEvents
 import com.clouddroid.app.local.LocalApps
 import com.clouddroid.app.local.LocalInstaller
 import com.clouddroid.app.local.PhoneApp
+import com.clouddroid.app.virtual.VirtualApp
+import com.clouddroid.app.virtual.VirtualApps
 import com.clouddroid.app.core.RemoteFile
 import com.clouddroid.app.stream.StreamHub
 import com.clouddroid.app.device.*
@@ -78,8 +80,43 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var savedApps by mutableStateOf<List<Pair<String, AppVault.SavedApp>>>(emptyList())
     /** Data backups of one app on the drives: provider to zip file. */
     var dataBackups by mutableStateOf<List<Pair<String, CloudEntry>>>(emptyList())
-    /** "phone" installs on this phone (default); "server" installs on a CloudDroid server, if one is set up. */
-    var installTarget by mutableStateOf("phone")
+    /** "virtual" runs inside CloudDroid, no install (default); "phone" installs in Android; "server" installs on a CloudDroid server. */
+    var installTarget by mutableStateOf("virtual")
+    val virtual = VirtualApps(app, cloud) { settings.value.streamDiskMb }
+    var virtualApps by mutableStateOf<List<VirtualApp>>(emptyList())
+
+    fun refreshVirtual() { viewModelScope.launch { virtualApps = try { virtual.list() } catch (e: Throwable) { emptyList() } } }
+
+    private suspend fun addVirtual(provider: String, entry: CloudEntry) {
+        transfer = "Adding ${entry.name}" to 0f
+        try {
+            val pkg = virtual.addFromCloud(provider, entry) { transfer = "Adding ${entry.name}" to it }
+            message = "Added $pkg. Press Run in the App library (Inside CloudDroid)."
+        } finally { transfer = null }
+        refreshVirtual()
+    }
+
+    /** Runs an app inside CloudDroid; if it is not on the phone it first comes back from the drive. */
+    fun runVirtual(pkg: String) = launchSafe {
+        if (!virtual.isInstalled(pkg)) {
+            transfer = "Bringing $pkg back from your drive" to 0f
+            try { virtual.ensureOnPhone(pkg) { transfer = "Bringing $pkg back from your drive" to it } } finally { transfer = null }
+            refreshVirtual()
+        }
+        if (!virtual.launch(pkg)) message = "CloudDroid could not start this app. Many apps cannot run inside another app."
+    }
+
+    fun freeVirtual(provider: String, pkg: String) = launchSafe(provider) {
+        busy = "Saving $pkg to ${providerName(provider)}…"
+        try { message = virtual.saveAndFree(provider, pkg) } finally { busy = null }
+        refreshVirtual()
+    }
+
+    fun removeVirtual(pkg: String, forgetDrive: Boolean) = launchSafe {
+        if (virtual.isInstalled(pkg)) virtual.remove(pkg)
+        if (forgetDrive) virtual.forget(pkg)
+        refreshVirtual()
+    }
     var busy by mutableStateOf<String?>(null)
 
     init {
@@ -118,6 +155,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         message = "Allow CloudDroid to install apps in the screen that just opened, then try again."
         LocalInstaller.openPermissionScreen(appContext)
         return false
+    }
+
+    fun addSavedVirtual(provider: String, saved: AppVault.SavedApp) = launchSafe(provider) {
+        addVirtual(provider, saved.apks.first { it.name == "base.apk" || it.name.endsWith(".apk") })
     }
 
     fun installSaved(provider: String, saved: AppVault.SavedApp) = launchSafe(provider) {
@@ -300,7 +341,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ------------------------------------------------------------ apps
     fun install(provider: String, path: String) = launchSafe(provider) {
-        if (installTarget == "phone" || !hasServer) {
+        if (installTarget == "virtual" || (installTarget == "server" && !hasServer)) {
+            val parent = path.substringBeforeLast('/').ifEmpty { "/" }
+            val entry = cloud.list(provider, parent).firstOrNull { it.path == path }
+                ?: throw IllegalStateException("Cannot find that file on the drive")
+            addVirtual(provider, entry)
+            return@launchSafe
+        }
+        if (installTarget == "phone") {
             installLocalFile(provider, path)
             return@launchSafe
         }

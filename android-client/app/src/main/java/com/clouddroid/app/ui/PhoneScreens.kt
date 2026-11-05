@@ -181,3 +181,58 @@ private fun ProviderDialog(title: String, text: String, providers: List<String>,
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
+
+/**
+ * Apps running INSIDE CloudDroid (no Android install). The drive is their permanent store: "Save and free space"
+ * puts the app's data on the drive and removes the app from this phone; "Run" brings it back first if needed.
+ */
+@Composable
+fun VirtualLibrary(vm: AppViewModel, query: String) {
+    LaunchedEffect(Unit) { vm.refreshVirtual(); vm.refreshProvidersAsync() }
+    val connected = PROVIDERS.filter { vm.providers[it]?.connected == true }
+    val shown = vm.virtualApps.filter { query.isBlank() || it.label.contains(query, true) || it.pkg.contains(query, true) }
+    var freeFor by remember { mutableStateOf<com.clouddroid.app.virtual.VirtualApp?>(null) }
+    var removeFor by remember { mutableStateOf<com.clouddroid.app.virtual.VirtualApp?>(null) }
+
+    BusyCard(vm)
+    Text("Apps here run inside CloudDroid and are not installed in Android. Add one from the Add tab. Experimental: apps that check their environment (many games, banking, Google Play apps) may refuse to start.",
+        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    if (shown.isEmpty()) EmptyHint("No apps added yet.")
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(vertical = 8.dp)) {
+        items(shown, key = { it.pkg }) { app ->
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        if (app.icon != null) Image(app.icon, null, Modifier.size(44.dp)) else Spacer(Modifier.size(44.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(app.label, fontWeight = FontWeight.SemiBold)
+                            Text(app.pkg, style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                            Text(if (app.onPhone) "On this phone" else "On your drive only",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Button(onClick = { vm.runVirtual(app.pkg) }) { Text("Run") }
+                        OutlinedButton(enabled = app.onPhone && connected.isNotEmpty(), onClick = { freeFor = app }) { Text("Save & free space") }
+                        TextButton(onClick = { removeFor = app }) { Text("Remove") }
+                    }
+                }
+            }
+        }
+    }
+    freeFor?.let { app ->
+        ProviderDialog("Save ${app.label} to…",
+            "Saves this app's data (progress, settings) to /CloudDroid/data on your drive, then removes the app and its data from this phone. Run it again any time to bring it back.",
+            connected, onDismiss = { freeFor = null }) { p -> vm.freeVirtual(p, app.pkg); freeFor = null }
+    }
+    removeFor?.let { app ->
+        AlertDialog(
+            onDismissRequest = { removeFor = null },
+            title = { Text("Remove ${app.label}?") },
+            text = { Text("Removes it from CloudDroid, including its data on this phone. Data you saved to the drive stays there.") },
+            confirmButton = { TextButton(onClick = { vm.removeVirtual(app.pkg, true); removeFor = null }) { Text("Remove") } },
+            dismissButton = { TextButton(onClick = { removeFor = null }) { Text("Cancel") } },
+        )
+    }
+}
