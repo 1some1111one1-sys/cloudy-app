@@ -116,6 +116,25 @@ class LocalCloud(private val context: Context) {
         StreamHub.open(context, client(provider), provider, Paths.normalize(path), size, diskMb)
     }
 
+    /** Creates the folder and any missing parents; a folder that already exists is fine. */
+    suspend fun ensureDirs(provider: String, path: String) = io(provider) {
+        val c = client(provider)
+        var cur = ""
+        for (part in Paths.normalize(path).split('/').filter { it.isNotEmpty() }) {
+            cur += "/$part"
+            try { c.mkdir(cur) } catch (e: CloudException) {
+                if (e.status != 405 && !e.message.orEmpty().contains("already exists")) throw e
+            }
+        }
+    }
+
+    suspend fun uploadFile(provider: String, dest: String, file: File) =
+        io(provider) { client(provider).upload(Paths.normalize(dest), file, Paths.mimeFor(Paths.name(dest))) }
+
+    /** Downloads a whole file into [dest] (used for small things such as a data backup, then deleted). */
+    suspend fun downloadTo(provider: String, path: String, dest: File) =
+        io(provider) { client(provider).download(Paths.normalize(path), dest) }
+
     suspend fun mkdir(provider: String, path: String) = io(provider) { client(provider).mkdir(Paths.normalize(path)) }
 
     suspend fun delete(provider: String, path: String, isDir: Boolean) =

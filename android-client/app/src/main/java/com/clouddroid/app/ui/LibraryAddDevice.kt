@@ -24,6 +24,8 @@ fun LibraryScreen(vm: AppViewModel, onLaunch: (String) -> Unit, onUpdate: () -> 
     var backupFor by remember { mutableStateOf<InstalledApp?>(null) }
     var restoreFor by remember { mutableStateOf<InstalledApp?>(null) }
     var query by remember { mutableStateOf("") }
+    val hasServer = settings.serverUrl.isNotBlank() && settings.token.isNotBlank()
+    var mode by remember { mutableStateOf("phone") }
 
     val shown = vm.apps
         .filter { query.isBlank() || it.label.contains(query, true) || it.packageName.contains(query, true) }
@@ -34,8 +36,12 @@ fun LibraryScreen(vm: AppViewModel, onLaunch: (String) -> Unit, onUpdate: () -> 
         Text("App library", style = MaterialTheme.typography.headlineMedium)
         OutlinedTextField(query, { query = it }, singleLine = true, label = { Text("Search apps") },
             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
-        if (settings.serverUrl.isBlank() || settings.token.isBlank()) NeedsServerCard(onOpenSettings)
-        else if (shown.isEmpty()) EmptyHint(if (vm.apps.isEmpty()) "No apps installed on the remote device yet." else "No match.")
+        if (hasServer) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = mode == "phone", onClick = { mode = "phone" }, label = { Text("This phone") })
+            FilterChip(selected = mode == "server", onClick = { mode = "server" }, label = { Text("Remote device") })
+        }
+        if (!hasServer || mode == "phone") { PhoneLibrary(vm, query); return@Column }
+        if (shown.isEmpty()) EmptyHint(if (vm.apps.isEmpty()) "No apps installed on the remote device yet." else "No match.")
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
             items(shown, key = { it.packageName }) { app ->
                 Card(Modifier.fillMaxWidth()) {
@@ -114,28 +120,54 @@ fun LibraryScreen(vm: AppViewModel, onLaunch: (String) -> Unit, onUpdate: () -> 
     }
 }
 
-/** SCREEN 4: add application. */
+/** SCREEN 4: add application. Installs on THIS phone from the drive (no server); a server is optional. */
 @Composable
 fun AddScreen(vm: AppViewModel, onPick: (String) -> Unit, onOpenSettings: () -> Unit) {
     val job = vm.job
     val settings = vm.settings.collectAsStateCompat()
-    val noServer = settings.serverUrl.isBlank() || settings.token.isBlank()
+    val hasServer = settings.serverUrl.isNotBlank() && settings.token.isNotBlank()
+    val onPhone = !hasServer || vm.installTarget == "phone"
+    LaunchedEffect(Unit) { vm.refreshProvidersAsync(); vm.loadSavedApps() }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Add application", style = MaterialTheme.typography.headlineMedium)
-        Text("Pick an APK on your drive. The backend downloads it to the remote device and installs it there; nothing is installed on this phone.",
+        Text(if (onPhone) "Install an app on this phone from your drive. The APK is read from TeraBox or MEGA piece by piece and handed to Android's installer; it is not kept in this app's storage. Android asks you to confirm."
+        else "Pick an APK on your drive. Your server downloads it to the remote device and installs it there.",
             color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (noServer) NeedsServerCard(onOpenSettings)
+        if (hasServer) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = onPhone, onClick = { vm.installTarget = "phone" }, label = { Text("Install on this phone") })
+            FilterChip(selected = !onPhone, onClick = { vm.installTarget = "server" }, label = { Text("Install on remote device") })
+        }
+        BusyCard(vm)
         for (p in PROVIDERS) {
             val connected = vm.providers[p]?.connected == true
-            Button(onClick = { onPick(p) }, enabled = connected && !noServer, modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = { onPick(p) }, enabled = connected, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Filled.CloudDownload, null)
                 Spacer(Modifier.width(8.dp))
-                Text(if (connected) "Select from ${providerName(p)}" else "${providerName(p)} not connected")
+                Text(if (connected) "Choose an APK on ${providerName(p)}" else "${providerName(p)} not connected")
             }
         }
-        Text("To upload an APK from this phone, open Cloud storage, press Upload, then select it from the drive here.",
+        Text("To put an APK on the drive from this phone, use Cloud storage → Upload. Apps already installed here can be saved from the App library (Save app).",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+        if (onPhone) {
+            SectionTitle("Apps saved on your drive")
+            if (vm.savedApps.isEmpty()) EmptyHint("Nothing saved yet. Use Save app in the App library.")
+            for ((p, saved) in vm.savedApps) {
+                Card(Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Text(saved.pkg, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+                            Text("${providerName(p)} · version code ${saved.versionCode} · ${formatBytes(saved.sizeBytes)}" +
+                                if (saved.apks.size > 1) " · ${saved.apks.size} parts" else "",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        FilledTonalButton(onClick = { vm.installSaved(p, saved) }) { Text("Install") }
+                    }
+                }
+            }
+        }
 
         if (job != null) {
             Card(Modifier.fillMaxWidth()) {

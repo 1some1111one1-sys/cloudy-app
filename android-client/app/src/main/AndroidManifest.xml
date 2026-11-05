@@ -3,6 +3,16 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Install apps from the drive on this phone (Android still asks the user to confirm each install). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!-- See the launchable apps installed on this phone, without the broad "all packages" permission. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
 
     <application
         android:allowBackup="false"
@@ -10,6 +20,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.CloudDroid"
         android:usesCleartextTraffic="false">
+
+        <receiver
+            android:name=".local.InstallResultReceiver"
+            android:exported="false" />
 
         <activity
             android:name=".cloud.TeraBoxLoginActivity"

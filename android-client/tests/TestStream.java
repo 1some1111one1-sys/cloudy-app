@@ -24,6 +24,7 @@ final class TestStream {
         run("terabox partial reads + lazy file", TestStream::testTeraBox);
         run("concurrent readers", TestStream::testConcurrent);
         run("sequential read-ahead", TestStream::testReadAhead);
+        run("zip pack", TestStream::testZipPack);
     }
 
     private static byte[] bytes(int n, long seed) {
@@ -243,5 +244,50 @@ final class TestStream {
         } finally {
             s.stop();
         }
+    }
+
+    private static void testZipPack() throws Exception {
+        eq("safe name plain", "a/b.txt", ZipPack.safeName("a/b.txt"));
+        eq("safe name cleans slashes", "a/b", ZipPack.safeName("/a//./b"));
+        eq("safe name backslashes", "a/b", ZipPack.safeName("a\\b"));
+        check("dot-dot refused", ZipPack.safeName("../x") == null && ZipPack.safeName("a/../../x") == null);
+        check("empty refused", ZipPack.safeName("") == null && ZipPack.safeName("/") == null && ZipPack.safeName(null) == null);
+
+        java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+        byte[] big = bytes(3_000_000, 9);
+        try (ZipPack.Writer w = new ZipPack.Writer(bos)) {
+            w.add("save/slot1.dat", new java.io.ByteArrayInputStream("one".getBytes()));
+            w.add("save/deep/slot2.dat", new java.io.ByteArrayInputStream(big));
+            w.add("empty.txt", new java.io.ByteArrayInputStream(new byte[0]));
+            eq("writer counts files", 3, w.count());
+        }
+        java.util.Map<String, byte[]> got = new java.util.TreeMap<>();
+        int n = ZipPack.unpack(new java.io.ByteArrayInputStream(bos.toByteArray()), name -> new java.io.ByteArrayOutputStream() {
+            @Override
+            public void close() {
+                got.put(name, toByteArray());
+            }
+        });
+        eq("unpack count", 3, n);
+        check("unpacked content equals the original", java.util.Arrays.equals(big, got.get("save/deep/slot2.dat"))
+                && "one".equals(new String(got.get("save/slot1.dat"))) && got.get("empty.txt").length == 0);
+
+        java.io.ByteArrayOutputStream evil = new java.io.ByteArrayOutputStream();
+        try (java.util.zip.ZipOutputStream z = new java.util.zip.ZipOutputStream(evil)) {
+            z.putNextEntry(new java.util.zip.ZipEntry("../../escape.txt"));
+            z.write(1);
+            z.closeEntry();
+        }
+        java.util.List<String> opened = new ArrayList<>();
+        boolean refused = false;
+        try {
+            ZipPack.unpack(new java.io.ByteArrayInputStream(evil.toByteArray()), name -> {
+                opened.add(name);
+                return new java.io.ByteArrayOutputStream();
+            });
+        } catch (java.io.IOException e) {
+            refused = true;
+        }
+        check("an archive with ../ names is refused and nothing is opened", refused && opened.isEmpty());
     }
 }

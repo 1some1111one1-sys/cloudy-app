@@ -26,9 +26,10 @@ fun HomeScreen(
     onOpenCloud: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
-    LaunchedEffect(Unit) { vm.refreshAll() }
+    LaunchedEffect(Unit) { vm.refreshAll(); vm.refreshPhoneApps() }
     val settings = vm.settings.collectAsStateCompat()
     val dev = vm.device
+    val hasServer = settings.serverUrl.isNotBlank() && settings.token.isNotBlank()
     val recent = vm.apps.filter { it.lastLaunched != null }.sortedByDescending { it.lastLaunched }.take(8)
     val pinned = vm.apps.filter { it.packageName in settings.pinned }
 
@@ -43,12 +44,13 @@ fun HomeScreen(
         }
         Text("Welcome back", style = MaterialTheme.typography.headlineMedium)
         Text(
-            "Your apps run on a remote Android device. This phone only shows the screen and sends your touches.",
+            if (hasServer) "Your apps run on this phone or on your remote Android device."
+            else "Your apps run on this phone, using its own RAM and cache. Their APKs and data are kept on your TeraBox or MEGA drive and brought back when you need them.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
-        // remote device status
-        Card(Modifier.fillMaxWidth().clickable(onClick = onOpenDevice)) {
+        // remote device status (only when a server is set up)
+        if (hasServer) Card(Modifier.fillMaxWidth().clickable(onClick = onOpenDevice)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     StatusDot(if (dev?.status == "running") Good else if (dev == null) MaterialTheme.colorScheme.outline else Warn)
@@ -82,7 +84,7 @@ fun HomeScreen(
         }
 
         Button(onClick = onAdd, Modifier.fillMaxWidth()) {
-            Icon(Icons.Filled.Add, null); Spacer(Modifier.width(8.dp)); Text("Add APK")
+            Icon(Icons.Filled.Add, null); Spacer(Modifier.width(8.dp)); Text("Install from drive")
         }
 
         if (recent.isNotEmpty()) {
@@ -101,9 +103,29 @@ fun HomeScreen(
             }
         }
 
-        SectionTitle("Installed apps")
-        if (vm.apps.isEmpty()) EmptyHint("Nothing installed yet. Add an APK from TeraBox or MEGA.")
-        val quick = if (pinned.isNotEmpty()) pinned else vm.apps.take(6)
+        SectionTitle(if (hasServer) "Remote device apps" else "Apps on this phone")
+        if (!hasServer) {
+            val phonePinned = vm.phoneApps.filter { it.pkg in settings.pinned }
+            for (app in (if (phonePinned.isNotEmpty()) phonePinned else vm.phoneApps.take(6))) {
+                Card(Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        PhoneIcon(app.pkg)
+                        Column(Modifier.weight(1f)) {
+                            Text(app.label.ifBlank { app.pkg }, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+                            Text(app.pkg, style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                        }
+                        FilledTonalButton(onClick = { vm.launchLocal(app.pkg) }) {
+                            Icon(Icons.Filled.PlayArrow, null); Text("Open")
+                        }
+                    }
+                }
+            }
+            TextButton(onClick = onAdd) { Text("Install an app from your drive, or manage saved apps and data →") }
+        }
+        if (hasServer && vm.apps.isEmpty()) EmptyHint("Nothing installed on the remote device yet.")
+        val quick = if (!hasServer) emptyList() else if (pinned.isNotEmpty()) pinned else vm.apps.take(6)
         for (app in quick) {
             Card(Modifier.fillMaxWidth()) {
                 Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically,

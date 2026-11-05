@@ -12,13 +12,20 @@ import androidx.lifecycle.viewModelScope
 import com.clouddroid.app.cloud.BackendApi
 import com.clouddroid.app.cloud.BackendException
 import com.clouddroid.app.cloud.LocalCloud
+import com.clouddroid.app.local.AppVault
+import com.clouddroid.app.local.InstallEvents
+import com.clouddroid.app.local.LocalApps
+import com.clouddroid.app.local.LocalInstaller
+import com.clouddroid.app.local.PhoneApp
 import com.clouddroid.app.core.RemoteFile
 import com.clouddroid.app.stream.StreamHub
 import com.clouddroid.app.device.*
 import com.clouddroid.app.settings.AppSettings
 import com.clouddroid.app.settings.SettingsStore
 import com.clouddroid.app.settings.StreamProfile
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -62,6 +69,91 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var job by mutableStateOf<InstallJob?>(null)
     var transfer by mutableStateOf<Pair<String, Float>?>(null) // label to progress 0..1
     var backups by mutableStateOf<List<BackupInfo>>(emptyList())
+
+    // ------------------------------------------------------------ apps on this phone (no server)
+    private val appContext: Application = app
+    val vault = AppVault(app, cloud) { settings.value.streamDiskMb }
+    var phoneApps by mutableStateOf<List<PhoneApp>>(emptyList())
+    /** Apps whose APKs are saved on a drive: provider to saved app. */
+    var savedApps by mutableStateOf<List<Pair<String, AppVault.SavedApp>>>(emptyList())
+    /** Data backups of one app on the drives: provider to zip file. */
+    var dataBackups by mutableStateOf<List<Pair<String, CloudEntry>>>(emptyList())
+    /** "phone" installs on this phone (default); "server" installs on a CloudDroid server, if one is set up. */
+    var installTarget by mutableStateOf("phone")
+    var busy by mutableStateOf<String?>(null)
+
+    init {
+        viewModelScope.launch {
+            InstallEvents.message.collect {
+                if (it != null) { message = it; InstallEvents.consume(); refreshPhoneApps() }
+            }
+        }
+    }
+
+    fun refreshPhoneApps() { viewModelScope.launch { phoneApps = withContext(Dispatchers.IO) { LocalApps.list(appContext) } } }
+
+    fun launchLocal(pkg: String) {
+        if (!LocalApps.launch(appContext, pkg)) message = "This app cannot be opened."
+    }
+
+    fun uninstallLocal(pkg: String) = LocalApps.uninstall(appContext, pkg)
+
+    private fun connected(provider: String) = providers[provider]?.connected == true
+
+    fun saveApkToCloud(provider: String, app: PhoneApp) = launchSafe(provider) {
+        busy = "Saving ${app.label} to ${providerName(provider)}…"
+        try { message = vault.saveApk(provider, app) } finally { busy = null }
+    }
+
+    fun loadSavedApps() = launchSafe {
+        val out = ArrayList<Pair<String, AppVault.SavedApp>>()
+        for (p in PROVIDERS) if (connected(p)) {
+            try { vault.savedApps(p).forEach { out += p to it } } catch (e: Exception) { fail(e, p) }
+        }
+        savedApps = out
+    }
+
+    private suspend fun ensureCanInstall(): Boolean {
+        if (LocalInstaller.canInstall(appContext)) return true
+        message = "Allow CloudDroid to install apps in the screen that just opened, then try again."
+        LocalInstaller.openPermissionScreen(appContext)
+        return false
+    }
+
+    fun installSaved(provider: String, saved: AppVault.SavedApp) = launchSafe(provider) {
+        if (!ensureCanInstall()) return@launchSafe
+        transfer = "Installing ${saved.pkg}" to 0f
+        try { vault.install(provider, saved.apks) { transfer = "Installing ${saved.pkg}" to it } } finally { transfer = null }
+    }
+
+    private suspend fun installLocalFile(provider: String, path: String) {
+        if (!ensureCanInstall()) return
+        val parent = path.substringBeforeLast('/').ifEmpty { "/" }
+        val entry = cloud.list(provider, parent).firstOrNull { it.path == path }
+            ?: throw IllegalStateException("Cannot find that file on the drive")
+        val name = entry.name
+        transfer = "Installing $name" to 0f
+        try { vault.install(provider, listOf(entry)) { transfer = "Installing $name" to it } } finally { transfer = null }
+    }
+
+    fun loadDataBackups(pkg: String) = launchSafe {
+        val out = ArrayList<Pair<String, CloudEntry>>()
+        for (p in PROVIDERS) if (connected(p)) {
+            try { vault.listData(p, pkg).forEach { out += p to it } } catch (e: Exception) { fail(e, p) }
+        }
+        dataBackups = out
+        if (out.isEmpty()) message = "No saved data for this app on your drives yet."
+    }
+
+    fun saveData(provider: String, pkg: String, tree: android.net.Uri) = launchSafe(provider) {
+        busy = "Saving data to ${providerName(provider)}…"
+        try { message = vault.saveData(provider, pkg, tree) } finally { busy = null }
+    }
+
+    fun restoreData(provider: String, backup: CloudEntry, tree: android.net.Uri) = launchSafe(provider) {
+        busy = "Restoring data from ${providerName(provider)}…"
+        try { message = vault.restoreData(provider, backup, tree) } finally { busy = null }
+    }
 
     fun api() = BackendApi(settings.value.serverUrl, settings.value.token)
 
@@ -208,8 +300,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ------------------------------------------------------------ apps
     fun install(provider: String, path: String) = launchSafe(provider) {
-        if (!hasServer) {
-            message = "Installing and running apps needs a CloudDroid server. Add one in Settings."
+        if (installTarget == "phone" || !hasServer) {
+            installLocalFile(provider, path)
             return@launchSafe
         }
         var j = api().install(provider, path)
