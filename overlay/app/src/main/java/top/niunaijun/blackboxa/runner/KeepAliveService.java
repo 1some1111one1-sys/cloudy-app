@@ -71,7 +71,7 @@ public class KeepAliveService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null && ACTION_STOP.equals(intent.getAction())) {
             prefs(this).edit().putBoolean(KEY_ENABLED, false).apply();
-            stopBindLoop();
+            stopGuestLoop();
             releaseWakeLock();
             stopForeground(true);
             stopSelf();
@@ -80,13 +80,13 @@ public class KeepAliveService extends Service {
 
         startForeground(NOTIFICATION_ID, buildNotification());
         acquireWakeLock();
-        startBindLoop();
+        startGuestLoop();
         return START_STICKY;
     }
 
     @Override
     public void onDestroy() {
-        stopBindLoop();
+        stopGuestLoop();
         releaseWakeLock();
         super.onDestroy();
     }
@@ -94,44 +94,42 @@ public class KeepAliveService extends Service {
     // ------------------------------------------------------------ Virtual app processes
     //
     // Virtual apps run in separate stub processes (":p0", ":p1", ...). A foreground service in
-    // the main process does not protect them, so while this service runs it binds to the stub
-    // service of every running virtual-app process. A process bound by a foreground process is
-    // kept at a much higher priority and is far less likely to be killed in the background.
+    // the main process does not protect them, so for every running stub process this service
+    // starts GuestKeepService, a foreground service that lives inside that same process.
 
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private final Map<Integer, ServiceConnection> guestBindings = new HashMap<>();
-    private final Runnable bindLoop = new Runnable() {
+    private final Set<Integer> guestServices = new HashSet<>();
+    private final Runnable guestLoop = new Runnable() {
         @Override
         public void run() {
-            bindGuestProcesses();
-            handler.postDelayed(this, 5000);
+            keepGuestsAlive();
+            handler.postDelayed(this, 4000);
         }
     };
 
-    private void startBindLoop() {
-        handler.removeCallbacks(bindLoop);
-        handler.post(bindLoop);
+    private Intent guestIntent(int index) {
+        return new Intent().setComponent(new ComponentName(
+                getPackageName(), "top.niunaijun.blackboxa.runner.GuestKeepService$P" + index));
     }
 
-    private void stopBindLoop() {
-        handler.removeCallbacks(bindLoop);
-        for (Integer index : new HashSet<>(guestBindings.keySet())) {
-            dropBinding(index);
-        }
+    private void startGuestLoop() {
+        handler.removeCallbacks(guestLoop);
+        handler.post(guestLoop);
     }
 
-    private void dropBinding(int index) {
-        ServiceConnection connection = guestBindings.remove(index);
-        if (connection != null) {
+    private void stopGuestLoop() {
+        handler.removeCallbacks(guestLoop);
+        for (Integer index : new HashSet<>(guestServices)) {
             try {
-                unbindService(connection);
+                stopService(guestIntent(index));
             } catch (Throwable ignored) {
-                // already unbound
+                // process already gone
             }
         }
+        guestServices.clear();
     }
 
-    private void bindGuestProcesses() {
+    private void keepGuestsAlive() {
         try {
             ActivityManager am = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
             List<ActivityManager.RunningAppProcessInfo> processes = am.getRunningAppProcesses();
@@ -146,50 +144,20 @@ public class KeepAliveService extends Service {
                     running.add(Integer.parseInt(m.group(1)));
                 }
             }
-            for (Integer index : new HashSet<>(guestBindings.keySet())) {
-                if (!running.contains(index)) {
-                    dropBinding(index);
-                }
-            }
-            for (final Integer index : running) {
-                if (guestBindings.containsKey(index)) {
+            guestServices.retainAll(running);
+            for (Integer index : running) {
+                if (guestServices.contains(index)) {
                     continue;
                 }
-                ServiceConnection connection = new ServiceConnection() {
-                    @Override
-                    public void onServiceConnected(ComponentName name, IBinder service) {
-                    }
-
-                    @Override
-                    public void onServiceDisconnected(ComponentName name) {
-                        // The process died. Drop the binding so the system does not restart it.
-                        dropBinding(index);
-                    }
-
-                    public void onBindingDied(ComponentName name) {
-                        dropBinding(index);
-                    }
-
-                    public void onNullBinding(ComponentName name) {
-                        // Expected: the stub returns no binder. The binding itself is what counts.
-                    }
-                };
-                Intent intent = new Intent().setComponent(new ComponentName(
-                        getPackageName(), "top.niunaijun.blackbox.proxy.ProxyService$P" + index));
-                boolean ok = false;
                 try {
-                    ok = bindService(intent, connection, Context.BIND_AUTO_CREATE | Context.BIND_IMPORTANT);
-                } catch (Throwable ignored) {
-                    // keep going; the wake lock and foreground service still work
-                }
-                if (ok) {
-                    guestBindings.put(index, connection);
-                } else {
-                    try {
-                        unbindService(connection);
-                    } catch (Throwable ignored) {
-                        // nothing to unbind
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        startForegroundService(guestIntent(index));
+                    } else {
+                        startService(guestIntent(index));
                     }
+                    guestServices.add(index);
+                } catch (Throwable ignored) {
+                    // try again on the next round
                 }
             }
         } catch (Throwable ignored) {

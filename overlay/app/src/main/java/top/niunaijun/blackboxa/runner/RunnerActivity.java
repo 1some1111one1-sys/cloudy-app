@@ -285,7 +285,8 @@ public class RunnerActivity extends Activity {
                 }
                 final String text = "BG App Runner log, Android " + Build.VERSION.RELEASE
                         + ", " + Build.MANUFACTURER + " " + Build.MODEL
-                        + ", 64-bit host: " + BlackBoxCore.is64Bit() + "\n" + out;
+                        + ", 64-bit host: " + BlackBoxCore.is64Bit() + "\n"
+                        + diagnostics() + "\n" + out;
                 final int count = lines;
                 ui.post(() -> {
                     ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
@@ -300,6 +301,34 @@ public class RunnerActivity extends Activity {
                 setStatus("Could not read the log: " + t.getMessage());
             }
         });
+    }
+
+    /** A short snapshot of the settings and processes that decide whether apps survive. */
+    private String diagnostics() {
+        StringBuilder d = new StringBuilder();
+        try {
+            d.append("keepAlive=").append(KeepAliveService.isEnabled(this));
+            d.append(" floating=").append(FloatingButtonService.isEnabled(this))
+                    .append("/overlayPermission=").append(FloatingButtonService.canDraw(this));
+            PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+            if (pm != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                d.append(" batteryExempt=").append(pm.isIgnoringBatteryOptimizations(getPackageName()));
+            }
+            d.append("\nprocesses:");
+            android.app.ActivityManager am =
+                    (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);
+            List<android.app.ActivityManager.RunningAppProcessInfo> list = am.getRunningAppProcesses();
+            if (list != null) {
+                for (android.app.ActivityManager.RunningAppProcessInfo p : list) {
+                    if (p.processName.startsWith(getPackageName())) {
+                        d.append("\n  ").append(p.processName).append(" importance=").append(p.importance);
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            d.append("(diagnostics failed: ").append(t.getMessage()).append(")");
+        }
+        return d.toString();
     }
 
     private void refreshApps() {

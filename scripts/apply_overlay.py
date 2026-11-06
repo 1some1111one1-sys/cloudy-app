@@ -44,6 +44,17 @@ COMPONENTS = """
             android:exported="false" />
 """
 
+# One keep-alive service per virtual-app stub process (the engine ships ":p0" to ":p49").
+COMPONENTS += "".join(
+    f"""
+        <service
+            android:name="top.niunaijun.blackboxa.runner.GuestKeepService$P{i}"
+            android:exported="false"
+            android:process=":p{i}" />
+"""
+    for i in range(50)
+)
+
 
 def fail(message: str) -> None:
     print(f"error: {message}", file=sys.stderr)
