@@ -42,7 +42,10 @@ manager.
 
 - The container runs apps inside this app's processes, so any phone's battery manager can still
   stop them. Steps 3 to 5 improve the odds a lot, but nothing here can guarantee it.
-- Only plain `.apk` files work. Split bundles (`.apks`, `.xapk`, `.apkm`) do not.
+- Only one complete `.apk` file works. Split bundles (`.apks`, `.xapk`, `.apkm`) do not, and the base
+  APK taken from a Play Store split install installs but shows a blank screen. The app warns you
+  when it detects either case.
+- If an app opens to a blank or black screen, tap **Copy debug log**, then paste it to get the real error.
 - Apps that depend on Google Play services, root or integrity checks, banking apps, and some games
   may refuse to run or crash.
 - The engine says it supports Android 5 to 14+. Newer versions may have problems. If the build

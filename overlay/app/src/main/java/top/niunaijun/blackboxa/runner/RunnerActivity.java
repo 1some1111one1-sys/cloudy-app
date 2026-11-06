@@ -1,6 +1,9 @@
 package top.niunaijun.blackboxa.runner;
 
 import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
@@ -20,13 +23,18 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.zip.ZipFile;
 
 import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.entity.pm.InstallResult;
@@ -105,6 +113,7 @@ public class RunnerActivity extends Activity {
         root.addView(button("App info (autostart / background settings)", v -> openAppInfo()));
         root.addView(button("Open full BlackBox manager",
                 v -> startActivity(new Intent(this, WelcomeActivity.class))));
+        root.addView(button("Copy debug log (for problems)", v -> copyDebugLog()));
 
         TextView header = new TextView(this);
         header.setText("Apps inside the container");
@@ -180,9 +189,16 @@ public class RunnerActivity extends Activity {
                         out.write(buffer, 0, n);
                     }
                 }
+                String problem = notAnApk(temp);
+                if (problem != null) {
+                    setStatus("Cannot install: " + problem);
+                    return;
+                }
+                String warning = inspectApk(temp);
                 InstallResult result = BlackBoxCore.get().installPackageAsUser(temp, USER_ID);
                 if (result != null && result.success) {
-                    setStatus("Installed: " + result.packageName);
+                    setStatus("Installed: " + result.packageName
+                            + (warning == null ? "" : "\n\n" + warning));
                 } else {
                     setStatus("Install failed: " + (result == null ? "unknown error" : result.msg));
                 }
@@ -193,6 +209,91 @@ public class RunnerActivity extends Activity {
                 temp.delete();
             }
             ui.post(this::refreshApps);
+        });
+    }
+
+    /** Returns a reason if the file is not a single installable APK, otherwise null. */
+    private String notAnApk(File file) {
+        try (ZipFile zip = new ZipFile(file)) {
+            if (zip.getEntry("AndroidManifest.xml") == null) {
+                return "this is not a single APK. Files like .xapk, .apks and .apkm are bundles of "
+                        + "several APKs, which the container cannot install. Use one full APK instead.";
+            }
+            return null;
+        } catch (Throwable t) {
+            return "the file is not a valid APK (" + t.getMessage() + ").";
+        }
+    }
+
+    /** Returns a warning if the APK looks like one piece of a split install, otherwise null. */
+    private String inspectApk(File file) {
+        String splitWarning = "Warning: this looks like only the base part of a Play Store split "
+                + "install. Its code, libraries or resources may live in separate split files that "
+                + "the container cannot load, which usually ends in a blank screen. Use a single "
+                + "full (universal) APK of the app instead.";
+        try {
+            PackageInfo info = getPackageManager()
+                    .getPackageArchiveInfo(file.getPath(), PackageManager.GET_META_DATA);
+            if (info == null) {
+                return "Warning: Android could not read this APK's details. It may be incomplete "
+                        + "or part of a split install, in which case the app will probably show a "
+                        + "blank screen.";
+            }
+            android.os.Bundle meta = info.applicationInfo != null ? info.applicationInfo.metaData : null;
+            if (meta != null && (meta.getBoolean("com.android.vending.splits.required", false)
+                    || meta.containsKey("com.android.vending.splits"))) {
+                return splitWarning;
+            }
+        } catch (Throwable ignored) {
+            // no warning if the check itself fails
+        }
+        return null;
+    }
+
+    /** Copies recent warnings and errors from this app (including virtual apps) to the clipboard. */
+    private void copyDebugLog() {
+        setStatus("Collecting log...");
+        io.execute(() -> {
+            try {
+                Process process = Runtime.getRuntime().exec(
+                        new String[]{"logcat", "-d", "-v", "threadtime", "-t", "8000"});
+                Pattern level = Pattern.compile("^\\S+\\s+\\S+\\s+\\d+\\s+\\d+\\s+([VDIWEF])\\s");
+                StringBuilder out = new StringBuilder();
+                int lines = 0;
+                try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(process.getInputStream()))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        Matcher m = level.matcher(line);
+                        boolean keep = line.contains("BlackBox") || line.contains("AndroidRuntime")
+                                || line.contains("FATAL") || line.contains("SplashScreen")
+                                || (m.find() && "WEF".contains(m.group(1)));
+                        if (!keep) {
+                            continue;
+                        }
+                        out.append(line).append('\n');
+                        lines++;
+                        if (out.length() > 90000) {
+                            out.delete(0, out.length() - 70000);
+                        }
+                    }
+                }
+                final String text = "BG App Runner log, Android " + Build.VERSION.RELEASE
+                        + ", " + Build.MANUFACTURER + " " + Build.MODEL
+                        + ", 64-bit host: " + BlackBoxCore.is64Bit() + "\n" + out;
+                final int count = lines;
+                ui.post(() -> {
+                    ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                    if (cm != null) {
+                        cm.setPrimaryClip(ClipData.newPlainText("BG App Runner log", text));
+                    }
+                    status.setText(count == 0
+                            ? "The log is empty. Launch the app first, then try again."
+                            : "Copied " + count + " log lines. Paste them into your chat with Claude.");
+                });
+            } catch (Throwable t) {
+                setStatus("Could not read the log: " + t.getMessage());
+            }
         });
     }
 
