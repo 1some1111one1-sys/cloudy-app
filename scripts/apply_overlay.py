@@ -18,6 +18,7 @@ PERMISSIONS = [
     "android.permission.WAKE_LOCK",
     "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
     "android.permission.POST_NOTIFICATIONS",
+    "android.permission.SYSTEM_ALERT_WINDOW",
 ]
 
 LAUNCHER_CATEGORY = '<category android:name="android.intent.category.LAUNCHER" />'
@@ -36,6 +37,10 @@ COMPONENTS = """
 
         <service
             android:name="top.niunaijun.blackboxa.runner.KeepAliveService"
+            android:exported="false" />
+
+        <service
+            android:name="top.niunaijun.blackboxa.runner.FloatingButtonService"
             android:exported="false" />
 """
 

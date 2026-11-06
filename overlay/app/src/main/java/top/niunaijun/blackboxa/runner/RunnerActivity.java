@@ -56,6 +56,7 @@ public class RunnerActivity extends Activity {
     private TextView status;
     private LinearLayout appList;
     private Button keepButton;
+    private Button floatButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -77,6 +78,7 @@ public class RunnerActivity extends Activity {
             KeepAliveService.start(this);
         }
         updateKeepButton();
+        syncFloatingButton();
         refreshApps();
     }
 
@@ -108,6 +110,9 @@ public class RunnerActivity extends Activity {
 
         keepButton = button("", v -> toggleKeepAlive());
         root.addView(keepButton);
+
+        floatButton = button("", v -> toggleFloatingButton());
+        root.addView(floatButton);
 
         root.addView(button("Allow unrestricted battery use", v -> requestBatteryExemption()));
         root.addView(button("App info (autostart / background settings)", v -> openAppInfo()));
@@ -393,6 +398,47 @@ public class RunnerActivity extends Activity {
             setStatus("Keep-alive turned on. Also allow unrestricted battery use below.");
         }
         updateKeepButton();
+    }
+
+    private void syncFloatingButton() {
+        if (FloatingButtonService.isEnabled(this) && FloatingButtonService.canDraw(this)) {
+            FloatingButtonService.start(this);
+        } else {
+            FloatingButtonService.stop(this);
+        }
+        updateFloatButton();
+    }
+
+    private void updateFloatButton() {
+        if (!FloatingButtonService.isEnabled(this)) {
+            floatButton.setText("Floating button: OFF (tap to turn on)");
+        } else if (!FloatingButtonService.canDraw(this)) {
+            floatButton.setText("Floating button: needs permission (tap to allow)");
+        } else {
+            floatButton.setText("Floating button: ON (tap to turn off)");
+        }
+    }
+
+    private void toggleFloatingButton() {
+        boolean on = FloatingButtonService.isEnabled(this);
+        if (on && FloatingButtonService.canDraw(this)) {
+            FloatingButtonService.setEnabled(this, false);
+            setStatus("Floating button turned off.");
+        } else {
+            FloatingButtonService.setEnabled(this, true);
+            if (!FloatingButtonService.canDraw(this)) {
+                setStatus("Allow \"Display over other apps\" for BG App Runner, then come back.");
+                try {
+                    startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:" + getPackageName())));
+                } catch (Throwable t) {
+                    openAppInfo();
+                }
+            } else {
+                setStatus("Floating button on. It appears over a virtual app while it is open.");
+            }
+        }
+        syncFloatingButton();
     }
 
     private void requestBatteryExemption() {

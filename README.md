@@ -38,6 +38,16 @@ manager.
 5. Open **App info** and allow autostart / background activity if your phone has that option
    (Xiaomi, Oppo, Vivo, Realme, Samsung, Huawei all hide it under different names).
 
+## Floating button
+
+While a virtual app is on screen, a small round **BG** button floats on top. Drag it anywhere. Tap it
+to keep the app running in the background and go to the home screen. Hold it to hide it until the
+next time an app opens. It needs "Display over other apps" permission: tap **Floating button** in
+the app once to allow it.
+
+While keep-alive is on, the app also attaches to the processes the virtual apps run in, which
+raises their priority so the phone is less likely to stop them.
+
 ## What to expect
 
 - The container runs apps inside this app's processes, so any phone's battery manager can still
