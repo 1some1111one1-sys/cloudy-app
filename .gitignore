@@ -1,11 +1,6 @@
-*.iml
+engine/
+out/
+*.apk
 .gradle/
 build/
 local.properties
-.idea/
-__pycache__/
-*.pyc
-.pytest_cache/
-.venv/
-*.jks
-*.keystore
