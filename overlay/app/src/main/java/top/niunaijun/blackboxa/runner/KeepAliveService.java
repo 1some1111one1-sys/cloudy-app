@@ -11,6 +11,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.SharedPreferences;
+import android.media.AudioAttributes;
+import android.media.AudioFormat;
+import android.media.AudioManager;
+import android.media.AudioTrack;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -33,6 +37,7 @@ public class KeepAliveService extends Service {
 
     private static final String PREFS = "bg_runner_prefs";
     private static final String KEY_ENABLED = "keep_alive_enabled";
+    private static final String KEY_SILENT_AUDIO = "silent_audio_enabled";
     private static final String CHANNEL_ID = "bg_runner_keepalive";
     private static final int NOTIFICATION_ID = 4242;
     private static final String ACTION_STOP = "top.niunaijun.blackboxa.runner.STOP";
@@ -58,6 +63,14 @@ public class KeepAliveService extends Service {
         context.stopService(new Intent(context, KeepAliveService.class));
     }
 
+    public static boolean isSilentAudioEnabled(Context context) {
+        return prefs(context).getBoolean(KEY_SILENT_AUDIO, true);
+    }
+
+    public static void setSilentAudioEnabled(Context context, boolean enabled) {
+        prefs(context).edit().putBoolean(KEY_SILENT_AUDIO, enabled).apply();
+    }
+
     private static SharedPreferences prefs(Context context) {
         return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
     }
@@ -72,6 +85,7 @@ public class KeepAliveService extends Service {
         if (intent != null && ACTION_STOP.equals(intent.getAction())) {
             prefs(this).edit().putBoolean(KEY_ENABLED, false).apply();
             stopGuestLoop();
+            stopSilentAudio();
             releaseWakeLock();
             stopForeground(true);
             stopSelf();
@@ -81,12 +95,14 @@ public class KeepAliveService extends Service {
         startForeground(NOTIFICATION_ID, buildNotification());
         acquireWakeLock();
         startGuestLoop();
+        applySilentAudio();
         return START_STICKY;
     }
 
     @Override
     public void onDestroy() {
         stopGuestLoop();
+        stopSilentAudio();
         releaseWakeLock();
         super.onDestroy();
     }
@@ -162,6 +178,66 @@ public class KeepAliveService extends Service {
             }
         } catch (Throwable ignored) {
             // never let the keep-alive loop crash the service
+        }
+    }
+
+    // ------------------------------------------------------------ Silent audio
+    //
+    // Many phones (Xiaomi HyperOS in particular) leave apps alone while they are playing audio,
+    // which is why music and video apps keep running in the background. This loops one second of
+    // silence so the system sees the app as playing audio. It makes no sound and does not take
+    // audio focus, so other music keeps playing normally. It costs some battery.
+
+    private AudioTrack silentTrack;
+
+    private void applySilentAudio() {
+        if (isSilentAudioEnabled(this)) {
+            startSilentAudio();
+        } else {
+            stopSilentAudio();
+        }
+    }
+
+    private void startSilentAudio() {
+        if (silentTrack != null) {
+            return;
+        }
+        try {
+            int rate = 8000;
+            short[] silence = new short[rate];
+            AudioAttributes attributes = new AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build();
+            AudioFormat format = new AudioFormat.Builder()
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setSampleRate(rate)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                    .build();
+            AudioTrack track = new AudioTrack(attributes, format, silence.length * 2,
+                    AudioTrack.MODE_STATIC, AudioManager.AUDIO_SESSION_ID_GENERATE);
+            track.write(silence, 0, silence.length);
+            track.setLoopPoints(0, silence.length, -1);
+            track.play();
+            silentTrack = track;
+        } catch (Throwable ignored) {
+            silentTrack = null;
+        }
+    }
+
+    private void stopSilentAudio() {
+        if (silentTrack != null) {
+            try {
+                silentTrack.stop();
+            } catch (Throwable ignored) {
+                // already stopped
+            }
+            try {
+                silentTrack.release();
+            } catch (Throwable ignored) {
+                // already released
+            }
+            silentTrack = null;
         }
     }
 

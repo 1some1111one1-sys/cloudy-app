@@ -48,6 +48,14 @@ the app once to allow it.
 While keep-alive is on, the app also attaches to the processes the virtual apps run in, which
 raises their priority so the phone is less likely to stop them.
 
+## Xiaomi / Redmi (HyperOS)
+
+Xiaomi's battery manager stops background apps unless they play audio, so keep-alive also
+loops one second of silence (the **Silent audio trick** button; it makes no sound and costs
+some battery). Also use **Xiaomi: autostart settings** and **Xiaomi: battery saver**, set
+battery to No restrictions, lock the app in recents, and use the BG button instead of
+swiping the app away.
+
 ## What to expect
 
 - The container runs apps inside this app's processes, so any phone's battery manager can still

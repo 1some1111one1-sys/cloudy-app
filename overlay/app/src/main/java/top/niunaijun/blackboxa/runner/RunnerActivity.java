@@ -57,6 +57,7 @@ public class RunnerActivity extends Activity {
     private LinearLayout appList;
     private Button keepButton;
     private Button floatButton;
+    private Button silentButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -78,6 +79,7 @@ public class RunnerActivity extends Activity {
             KeepAliveService.start(this);
         }
         updateKeepButton();
+        updateSilentButton();
         syncFloatingButton();
         refreshApps();
     }
@@ -114,7 +116,12 @@ public class RunnerActivity extends Activity {
         floatButton = button("", v -> toggleFloatingButton());
         root.addView(floatButton);
 
+        silentButton = button("", v -> toggleSilentAudio());
+        root.addView(silentButton);
+
         root.addView(button("Allow unrestricted battery use", v -> requestBatteryExemption()));
+        root.addView(button("Xiaomi: autostart settings", v -> openXiaomiAutostart()));
+        root.addView(button("Xiaomi: battery saver (set No restrictions)", v -> openXiaomiBattery()));
         root.addView(button("App info (autostart / background settings)", v -> openAppInfo()));
         root.addView(button("Open full BlackBox manager",
                 v -> startActivity(new Intent(this, WelcomeActivity.class))));
@@ -427,6 +434,47 @@ public class RunnerActivity extends Activity {
             setStatus("Keep-alive turned on. Also allow unrestricted battery use below.");
         }
         updateKeepButton();
+    }
+
+    private void updateSilentButton() {
+        silentButton.setText(KeepAliveService.isSilentAudioEnabled(this)
+                ? "Silent audio trick: ON (helps on Xiaomi)"
+                : "Silent audio trick: OFF (tap to turn on)");
+    }
+
+    private void toggleSilentAudio() {
+        boolean enable = !KeepAliveService.isSilentAudioEnabled(this);
+        KeepAliveService.setSilentAudioEnabled(this, enable);
+        if (KeepAliveService.isEnabled(this)) {
+            KeepAliveService.start(this); // apply right away
+        }
+        setStatus(enable
+                ? "Silent audio on. The phone sees this app as playing audio while keep-alive is on."
+                : "Silent audio off.");
+        updateSilentButton();
+    }
+
+    private void openXiaomiAutostart() {
+        openFirstThatWorks(new Intent().setComponent(new android.content.ComponentName(
+                "com.miui.securitycenter",
+                "com.miui.permcenter.autostart.AutoStartManagementActivity")));
+    }
+
+    private void openXiaomiBattery() {
+        openFirstThatWorks(new Intent().setComponent(new android.content.ComponentName(
+                        "com.miui.powerkeeper", "com.miui.powerkeeper.ui.HiddenAppsConfigActivity"))
+                .putExtra("package_name", getPackageName())
+                .putExtra("package_label", "BG App Runner"));
+    }
+
+    /** Opens the given settings screen, or this app's info page if the phone does not have it. */
+    private void openFirstThatWorks(Intent intent) {
+        try {
+            startActivity(intent);
+        } catch (Throwable t) {
+            toast("That screen is not available on this phone. Opening App info instead.");
+            openAppInfo();
+        }
     }
 
     private void syncFloatingButton() {
