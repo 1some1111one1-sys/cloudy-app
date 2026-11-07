@@ -74,6 +74,7 @@ public class RunnerActivity extends Activity {
     private Switch floatSwitch;
     private Switch silentSwitch;
     private Switch stayActiveSwitch;
+    private Switch muteSwitch;
     private TextView floatDescription;
     private TextView silentDescription;
     private static final String SILENT_DESCRIPTION = "Only turn this on if apps still stop with the options above. "
@@ -195,6 +196,20 @@ public class RunnerActivity extends Activity {
                     }
                     KeepAliveService.setStayActiveEnabled(this, checked);
                     setStatus(checked ? "Stay active is on." : "Stay active is off.");
+                });
+
+        bgCard.addView(divider());
+        muteSwitch = addSwitchRow(bgCard, "Mute app sound in background",
+                "After tapping BG, the app's own sound is muted so only this app's media player "
+                        + "stays. Works for most apps; games that use their own audio engine may "
+                        + "still be heard.",
+                (button, checked) -> {
+                    if (syncing) {
+                        return;
+                    }
+                    KeepAliveService.setMuteGuestEnabled(this, checked);
+                    setStatus(checked ? "The app's sound will be muted in the background."
+                            : "The app's sound will keep playing in the background.");
                 });
 
         bgCard.addView(divider());
@@ -376,6 +391,7 @@ public class RunnerActivity extends Activity {
         syncing = true;
         keepSwitch.setChecked(KeepAliveService.isEnabled(this));
         stayActiveSwitch.setChecked(KeepAliveService.isStayActiveEnabled(this));
+        muteSwitch.setChecked(KeepAliveService.isMuteGuestEnabled(this));
         boolean floatWanted = FloatingButtonService.isEnabled(this);
         boolean canDraw = FloatingButtonService.canDraw(this);
         floatSwitch.setChecked(floatWanted && canDraw);
@@ -768,7 +784,8 @@ public class RunnerActivity extends Activity {
         try {
             d.append("androidUser=").append(android.os.Process.myUid() / 100000).append(" ");
             d.append("keepAlive=").append(KeepAliveService.isEnabled(this));
-            d.append(" stayActive=").append(KeepAliveService.isStayActiveEnabled(this));
+            d.append(" stayActive=").append(KeepAliveService.isStayActiveEnabled(this))
+                    .append(" muteGuest=").append(KeepAliveService.isMuteGuestEnabled(this));
             d.append(" silentAudio=").append(KeepAliveService.isSilentAudioEnabled(this))
                     .append(" (").append(KeepAliveService.silentAudioState(this)).append(")");
             d.append(" notificationsEnabled=").append(notificationsEnabled());

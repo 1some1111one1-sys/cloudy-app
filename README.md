@@ -54,6 +54,12 @@ it is on screen and does not reload when you come back. Android still removes th
 of a hidden app, so a game that draws every frame may stall its picture while hidden, even though
 the app itself keeps running. Turn the switch off if an app misbehaves.
 
+**Mute app sound in background** (on by default): after you tap BG, the virtual app's own audio
+players are set to volume 0 and restored when you come back, so only this app's media player is
+left. It covers apps that play sound through Android's normal players (MediaPlayer, ExoPlayer,
+SoundPool, Java AudioTrack). A game that mixes sound in its own native engine (OpenSL ES / AAudio)
+is not reachable this way and may still be heard.
+
 ## Xiaomi / Redmi (HyperOS)
 
 Xiaomi's battery manager is aggressive. Try these first: **Xiaomi: autostart settings**,

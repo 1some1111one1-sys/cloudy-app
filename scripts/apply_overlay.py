@@ -158,27 +158,49 @@ KEEP_PATCHES = [
             if (!serviceInfo.name.equals(ProxyManifest.getProxyService(BActivityThread.getAppPid()))""",
         1,
     ),
+    (
+        "fake/service/IAudioServiceProxy.java",
+        """    @ProxyMethod("requestAudioFocus")""",
+        """    // Lets StayActive mute this virtual app's own players while it is in the background.
+    @ProxyMethod("trackPlayer")
+    public static class TrackPlayer extends MethodHook {
+        @Override
+        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
+            Object result = method.invoke(who, args);
+            top.niunaijun.blackbox.fake.service.StayActive.onTrackPlayer(args);
+            return result;
+        }
+    }
+
+    @ProxyMethod("requestAudioFocus")""",
+        1,
+    ),
 ]
 
 
 def patch_keep_alive(engine: Path) -> None:
     root = engine / ENGINE_ROOT
-    file = root / "fake/service/HCallbackProxy.java"
-    if not file.is_file():
-        fail(f"{file} not found; the engine layout changed")
-    text = file.read_text(encoding="utf-8")
-    if KEEP_PATCH_MARKER in text:
+    marker = root / "fake/service/HCallbackProxy.java"
+    if not marker.is_file():
+        fail(f"{marker} not found; the engine layout changed")
+    if KEEP_PATCH_MARKER in marker.read_text(encoding="utf-8"):
         print("keep-alive engine patch already applied, skipping")
         return
+    texts = {}
     for rel, old, new, count in KEEP_PATCHES:
+        file = root / rel
+        if not file.is_file():
+            fail(f"{file} not found; the engine layout changed")
+        text = texts.setdefault(rel, file.read_text(encoding="utf-8"))
         found = text.count(old)
         if found != count:
             fail(f"{rel}: expected {count} match(es) of the keep-alive patch anchor, found {found}; "
                  "the engine changed, so pin an older engine_ref or update scripts/apply_overlay.py")
     for rel, old, new, count in KEEP_PATCHES:
-        text = text.replace(old, new)
-    file.write_text(text, encoding="utf-8")
-    print("patched HCallbackProxy for keep-alive support")
+        texts[rel] = texts[rel].replace(old, new)
+    for rel, text in texts.items():
+        (root / rel).write_text(text, encoding="utf-8")
+    print(f"patched {len(texts)} engine files for keep-alive support")
 
 
 def patch_engine(engine: Path) -> None:

@@ -97,17 +97,31 @@ public class KeepAliveService extends Service {
 
     public static void setStayActiveEnabled(Context context, boolean enabled) {
         prefs(context).edit().putBoolean(KEY_STAY_ACTIVE, enabled).apply();
-        if (!enabled) {
-            setStayActiveFlag(context, false);
-        }
     }
 
+    private static final String KEY_MUTE_GUEST = "mute_guest_audio";
+
+    /** Mute the virtual app's own sound while it is in the background (default on). */
+    public static boolean isMuteGuestEnabled(Context context) {
+        return prefs(context).getBoolean(KEY_MUTE_GUEST, true);
+    }
+
+    public static void setMuteGuestEnabled(Context context, boolean enabled) {
+        prefs(context).edit().putBoolean(KEY_MUTE_GUEST, enabled).apply();
+    }
+
+    /**
+     * Writes or removes the flag file read by the virtual-app processes. Its text says which
+     * behaviours are on: H = stay active (hold pause/stop), M = mute the app's own audio.
+     */
     public static void setStayActiveFlag(Context context, boolean on) {
         try {
             java.io.File flag = new java.io.File(context.getFilesDir(), "stay_active.flag");
-            if (on) {
-                if (isStayActiveEnabled(context) && !flag.exists()) {
-                    flag.createNewFile();
+            String mode = (isStayActiveEnabled(context) ? "H" : "")
+                    + (isMuteGuestEnabled(context) ? "M" : "");
+            if (on && !mode.isEmpty()) {
+                try (java.io.FileOutputStream out = new java.io.FileOutputStream(flag, false)) {
+                    out.write(mode.getBytes("UTF-8"));
                 }
             } else if (flag.exists()) {
                 flag.delete();
@@ -337,14 +351,18 @@ public class KeepAliveService extends Service {
             silentTrack = track;
             audioRunning = true;
             audioThread = new Thread(() -> {
-                short[] buffer = new short[AUDIO_RATE / 5 * 2]; // 200 ms of stereo
-                int seed = 12345;
+                // 200 ms of stereo. Almost pure digital silence: one single-step blip (1 out of
+                // 32768, about -90 dB) every 220 frames. The stream is still real audio data, so
+                // the system keeps treating it as playback, but there is nothing to hear.
+                short[] buffer = new short[AUDIO_RATE / 5 * 2];
+                int blip = 0;
                 try {
                     while (audioRunning) {
-                        for (int i = 0; i < buffer.length; i++) {
-                            seed = seed * 1103515245 + 12345;
-                            // +2 or -2 out of 32768: about -84 dB, far below anything audible
-                            buffer[i] = (short) (((seed >>> 16) & 1) == 0 ? 2 : -2);
+                        java.util.Arrays.fill(buffer, (short) 0);
+                        for (int frame = 0; frame < buffer.length / 2; frame += 220) {
+                            short value = (short) ((blip++ & 1) == 0 ? 1 : -1);
+                            buffer[frame * 2] = value;
+                            buffer[frame * 2 + 1] = value;
                         }
                         if (track.write(buffer, 0, buffer.length) < 0) {
                             break;
@@ -358,7 +376,7 @@ public class KeepAliveService extends Service {
             audioThread.start();
 
             startMediaSession();
-            setAudioState("playing (inaudible audio and media session active)");
+            setAudioState("playing (near-silent audio and media session active)");
             refreshNotification();
         } catch (Throwable t) {
             stopSilentAudio();
