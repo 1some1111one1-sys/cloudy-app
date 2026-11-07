@@ -61,6 +61,103 @@ def fail(message: str) -> None:
     sys.exit(1)
 
 
+# ---------------------------------------------------------------------------------------------
+# Engine source patches
+#
+# Fix: apps crashed on launch when BG App Runner runs in a secondary Android user (for example
+# Xiaomi "Second space", work profiles, or user 10). The engine told guest apps that their uid was
+# just an app id such as 10231, which Android reads as user 0. Every user-aware system call made
+# for the guest (isUserUnlocked, queryIntentActivities, ...) then targeted user 0 and was refused
+# with "requires INTERACT_ACROSS_USERS". Guests now see the real host user plus their own app id.
+# On the primary user (0) the value is identical to before, so nothing changes there.
+# ---------------------------------------------------------------------------------------------
+
+ENGINE_ROOT = Path("Bcore/src/main/java/top/niunaijun/blackbox")
+
+VISIBLE_UID_HELPERS = """    public static int getBAppId() {
+        return BUserHandle.getAppId(getBUid());
+    }
+
+    /**
+     * The uid a guest app sees from Os.getuid(): the real host user plus the guest's app id.
+     * On the primary user this equals the app id. In a secondary user (for example user 10) it
+     * keeps Android's user-aware calls on that user instead of user 0.
+     */
+    public static int getVisibleUid() {
+        return BlackBoxCore.getHostUserId() * BUserHandle.PER_USER_RANGE + getBAppId();
+    }
+
+    /** True for the uid returned by getVisibleUid() when the host is not on the primary user. */
+    public static boolean isVisibleUid(int uid) {
+        return BlackBoxCore.getHostUserId() != 0 && uid == getVisibleUid();
+    }
+"""
+
+# (file, old text, new text, expected number of occurrences of old text)
+ENGINE_PATCHES = [
+    (
+        "app/BActivityThread.java",
+        """    public static int getBAppId() {
+        return BUserHandle.getAppId(getBUid());
+    }
+""",
+        VISIBLE_UID_HELPERS,
+        1,
+    ),
+    (
+        "fake/service/libcore/OsStub.java",
+        "            return BActivityThread.getBAppId();",
+        "            return BActivityThread.getVisibleUid();",
+        1,
+    ),
+    (
+        "fake/service/base/UidMethodProxy.java",
+        "        if (uid == BActivityThread.getBUid()) {",
+        "        if (uid == BActivityThread.getBUid() || BActivityThread.isVisibleUid(uid)) {",
+        1,
+    ),
+    (
+        "utils/MethodParameterUtils.java",
+        "if (uid == BlackBoxCore.getBUid()) {",
+        "if (uid == BlackBoxCore.getBUid() || top.niunaijun.blackbox.app.BActivityThread.isVisibleUid(uid)) {",
+        2,
+    ),
+    (
+        "fake/service/IPackageManagerProxy.java",
+        "            if (uid == BlackBoxCore.getHostUid()) {\n                args[0] = BActivityThread.getBUid();",
+        "            if (uid == BlackBoxCore.getHostUid() || BActivityThread.isVisibleUid(uid)) {\n                args[0] = BActivityThread.getBUid();",
+        1,
+    ),
+]
+
+
+def patch_engine(engine: Path) -> None:
+    root = engine / ENGINE_ROOT
+    marker_file = root / "app/BActivityThread.java"
+    if not marker_file.is_file():
+        fail(f"{marker_file} not found; the engine layout changed")
+    if "getVisibleUid" in marker_file.read_text(encoding="utf-8"):
+        print("engine already patched, skipping")
+        return
+
+    # Check every anchor first so a changed engine fails before anything is half-patched.
+    texts = {}
+    for rel, old, new, count in ENGINE_PATCHES:
+        file = root / rel
+        if not file.is_file():
+            fail(f"{file} not found; the engine layout changed")
+        text = texts.setdefault(rel, file.read_text(encoding="utf-8"))
+        found = text.count(old)
+        if found != count:
+            fail(f"{rel}: expected {count} match(es) of the patch anchor, found {found}; "
+                 "the engine changed, so pin an older engine_ref or update scripts/apply_overlay.py")
+    for rel, old, new, count in ENGINE_PATCHES:
+        texts[rel] = texts[rel].replace(old, new)
+    for rel, text in texts.items():
+        (root / rel).write_text(text, encoding="utf-8")
+    print(f"patched {len(texts)} engine files for secondary-user support")
+
+
 def main() -> None:
     if len(sys.argv) != 2:
         fail("usage: apply_overlay.py <engine-checkout>")
@@ -75,6 +172,7 @@ def main() -> None:
         fail(f"{manifest} not found; is {engine} a NewBlackbox checkout?")
 
     shutil.copytree(overlay_app, app, dirs_exist_ok=True)
+    patch_engine(engine)
 
     text = manifest.read_text(encoding="utf-8")
     if "runner.RunnerActivity" in text:

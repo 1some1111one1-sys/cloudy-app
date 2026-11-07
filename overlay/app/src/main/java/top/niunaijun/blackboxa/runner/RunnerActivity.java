@@ -751,6 +751,7 @@ public class RunnerActivity extends Activity {
     private String diagnostics() {
         StringBuilder d = new StringBuilder();
         try {
+            d.append("androidUser=").append(android.os.Process.myUid() / 100000).append(" ");
             d.append("keepAlive=").append(KeepAliveService.isEnabled(this));
             d.append(" silentAudio=").append(KeepAliveService.isSilentAudioEnabled(this))
                     .append(" (").append(KeepAliveService.silentAudioState(this)).append(")");

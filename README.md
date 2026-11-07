@@ -61,6 +61,10 @@ must be allowed for the player to appear.
 
 ## What to expect
 
+- On phones where the app runs in a second user (Xiaomi Second space, work profile, "user 10"),
+  apps used to crash on launch with `requires INTERACT_ACROSS_USERS`. The build patches the engine
+  so guests see the real user. The debug log shows `androidUser=` so you can tell which user you are in.
+
 - The container runs apps inside this app's processes, so any phone's battery manager can still
   stop them. Steps 3 to 5 improve the odds a lot, but nothing here can guarantee it.
 - Only one complete `.apk` file works. Split bundles (`.apks`, `.xapk`, `.apkm`) do not, and the base
