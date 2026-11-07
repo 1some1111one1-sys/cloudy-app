@@ -45,8 +45,14 @@ to keep the app running in the background and go to the home screen. Hold it to 
 next time an app opens. It needs "Display over other apps" permission: tap **Floating button** in
 the app once to allow it.
 
-While keep-alive is on, the app also attaches to the processes the virtual apps run in, which
-raises their priority so the phone is less likely to stop them.
+While keep-alive is on, the app also binds to the processes the virtual apps run in with
+high importance, which raises their priority so the phone is less likely to stop them.
+
+**Stay active in background** (on by default, experimental): after you tap BG, the virtual app is
+not told that its screen went away. It never gets its pause/stop callbacks, so it keeps believing
+it is on screen and does not reload when you come back. Android still removes the window surface
+of a hidden app, so a game that draws every frame may stall its picture while hidden, even though
+the app itself keeps running. Turn the switch off if an app misbehaves.
 
 ## Xiaomi / Redmi (HyperOS)
 
@@ -85,5 +91,6 @@ must be allowed for the player to appear.
 | --- | --- |
 | `overlay/app/src/main/java/.../runner/RunnerActivity.java` | Launcher screen: pick APK, list, launch, stop, remove, keep-alive toggle |
 | `overlay/app/src/main/java/.../runner/KeepAliveService.java` | Foreground service with a partial wake lock |
-| `scripts/apply_overlay.py` | Copies the overlay into the engine and patches its manifest |
+| `overlay/Bcore/.../StayActive.java` | Engine-side hook behind "Stay active in background" |
+| `scripts/apply_overlay.py` | Copies the overlay into the engine and patches its manifest and sources |
 | `.github/workflows/build-apk.yml` | Builds the APK on GitHub Actions |

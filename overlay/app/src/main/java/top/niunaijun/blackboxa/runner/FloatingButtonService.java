@@ -215,6 +215,8 @@ public class FloatingButtonService extends Service {
         } catch (Throwable t) {
             note = "Could not start keep-alive: " + t.getMessage();
         }
+        // Tell the virtual apps not to react when their screen goes away (see KeepAliveService).
+        KeepAliveService.setStayActiveFlag(this, true);
         try {
             Intent home = new Intent(Intent.ACTION_MAIN);
             home.addCategory(Intent.CATEGORY_HOME);

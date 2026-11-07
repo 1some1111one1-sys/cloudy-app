@@ -65,6 +65,7 @@ public class KeepAliveService extends Service {
 
     public static void stop(Context context) {
         prefs(context).edit().putBoolean(KEY_ENABLED, false).apply();
+        setStayActiveFlag(context, false);
         context.stopService(new Intent(context, KeepAliveService.class));
     }
 
@@ -79,6 +80,41 @@ public class KeepAliveService extends Service {
     /** A short description of what the silent audio is doing right now. */
     public static String silentAudioState(Context context) {
         return prefs(context).getString(KEY_AUDIO_STATE, "not started");
+    }
+
+    // ------------------------------------------------------------ Stay active
+    //
+    // While the flag file exists, the engine ignores the "pause" and "stop" messages Android sends
+    // to a virtual app's screen when it leaves the foreground (see StayActive in the engine
+    // patch), so the app keeps believing it is on screen. The file lives in this app's files
+    // directory so every virtual-app process can see it.
+
+    private static final String KEY_STAY_ACTIVE = "stay_active_enabled";
+
+    public static boolean isStayActiveEnabled(Context context) {
+        return prefs(context).getBoolean(KEY_STAY_ACTIVE, true);
+    }
+
+    public static void setStayActiveEnabled(Context context, boolean enabled) {
+        prefs(context).edit().putBoolean(KEY_STAY_ACTIVE, enabled).apply();
+        if (!enabled) {
+            setStayActiveFlag(context, false);
+        }
+    }
+
+    public static void setStayActiveFlag(Context context, boolean on) {
+        try {
+            java.io.File flag = new java.io.File(context.getFilesDir(), "stay_active.flag");
+            if (on) {
+                if (isStayActiveEnabled(context) && !flag.exists()) {
+                    flag.createNewFile();
+                }
+            } else if (flag.exists()) {
+                flag.delete();
+            }
+        } catch (Throwable ignored) {
+            // without the flag the app just behaves normally
+        }
     }
 
     private void setAudioState(String state) {
@@ -98,6 +134,7 @@ public class KeepAliveService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null && ACTION_STOP.equals(intent.getAction())) {
             prefs(this).edit().putBoolean(KEY_ENABLED, false).apply();
+            setStayActiveFlag(this, false);
             stopGuestLoop();
             stopSilentAudio();
             setAudioState("off");
@@ -126,10 +163,10 @@ public class KeepAliveService extends Service {
     //
     // Virtual apps run in separate stub processes (":p0", ":p1", ...). A foreground service in
     // the main process does not protect them, so for every running stub process this service
-    // starts GuestKeepService, a foreground service that lives inside that same process.
+    // binds to GuestKeepService, which lives inside that same process, with BIND_IMPORTANT.
 
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private final Set<Integer> guestServices = new HashSet<>();
+    private final Map<Integer, ServiceConnection> guestBindings = new HashMap<>();
     private final Runnable guestLoop = new Runnable() {
         @Override
         public void run() {
@@ -151,14 +188,20 @@ public class KeepAliveService extends Service {
 
     private void stopGuestLoop() {
         handler.removeCallbacks(guestLoop);
-        for (Integer index : new HashSet<>(guestServices)) {
+        for (Integer index : new HashSet<>(guestBindings.keySet())) {
+            unbindGuest(index);
+        }
+    }
+
+    private void unbindGuest(int index) {
+        ServiceConnection connection = guestBindings.remove(index);
+        if (connection != null) {
             try {
-                stopService(guestIntent(index));
+                unbindService(connection);
             } catch (Throwable ignored) {
-                // process already gone
+                // already unbound
             }
         }
-        guestServices.clear();
     }
 
     private void keepGuestsAlive() {
@@ -176,18 +219,39 @@ public class KeepAliveService extends Service {
                     running.add(Integer.parseInt(m.group(1)));
                 }
             }
-            guestServices.retainAll(running);
+            // Let go of processes that ended, otherwise BIND_AUTO_CREATE would restart them empty.
+            for (Integer index : new HashSet<>(guestBindings.keySet())) {
+                if (!running.contains(index)) {
+                    unbindGuest(index);
+                }
+            }
             for (Integer index : running) {
-                if (guestServices.contains(index)) {
+                if (guestBindings.containsKey(index)) {
                     continue;
                 }
-                try {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        startForegroundService(guestIntent(index));
-                    } else {
-                        startService(guestIntent(index));
+                final int processIndex = index;
+                ServiceConnection connection = new ServiceConnection() {
+                    @Override
+                    public void onServiceConnected(ComponentName name, IBinder service) {
                     }
-                    guestServices.add(index);
+
+                    @Override
+                    public void onServiceDisconnected(ComponentName name) {
+                        handler.post(() -> unbindGuest(processIndex));
+                    }
+
+                    @Override
+                    public void onBindingDied(ComponentName name) {
+                        handler.post(() -> unbindGuest(processIndex));
+                    }
+                };
+                try {
+                    if (bindService(guestIntent(index), connection,
+                            Context.BIND_AUTO_CREATE | Context.BIND_IMPORTANT)) {
+                        guestBindings.put(index, connection);
+                    } else {
+                        unbindService(connection);
+                    }
                 } catch (Throwable ignored) {
                     // try again on the next round
                 }

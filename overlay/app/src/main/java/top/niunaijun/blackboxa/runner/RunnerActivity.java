@@ -73,6 +73,7 @@ public class RunnerActivity extends Activity {
     private Switch keepSwitch;
     private Switch floatSwitch;
     private Switch silentSwitch;
+    private Switch stayActiveSwitch;
     private TextView floatDescription;
     private TextView silentDescription;
     private static final String SILENT_DESCRIPTION = "Only turn this on if apps still stop with the options above. "
@@ -101,6 +102,7 @@ public class RunnerActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        KeepAliveService.setStayActiveFlag(this, false);
         // The activity is in the foreground here, so it is allowed to (re)start the services.
         if (KeepAliveService.isEnabled(this)) {
             KeepAliveService.start(this);
@@ -182,6 +184,18 @@ public class RunnerActivity extends Activity {
                     onFloatingToggled(checked);
                 });
         floatDescription = lastDescription;
+
+        bgCard.addView(divider());
+        stayActiveSwitch = addSwitchRow(bgCard, "Stay active in background",
+                "After tapping BG, the app is told it is still on screen so it does not pause or "
+                        + "reload. Experimental: turn it off if an app misbehaves.",
+                (button, checked) -> {
+                    if (syncing) {
+                        return;
+                    }
+                    KeepAliveService.setStayActiveEnabled(this, checked);
+                    setStatus(checked ? "Stay active is on." : "Stay active is off.");
+                });
 
         bgCard.addView(divider());
         silentSwitch = addSwitchRow(bgCard, "Backup: silent audio mode",
@@ -361,6 +375,7 @@ public class RunnerActivity extends Activity {
     private void syncSwitches() {
         syncing = true;
         keepSwitch.setChecked(KeepAliveService.isEnabled(this));
+        stayActiveSwitch.setChecked(KeepAliveService.isStayActiveEnabled(this));
         boolean floatWanted = FloatingButtonService.isEnabled(this);
         boolean canDraw = FloatingButtonService.canDraw(this);
         floatSwitch.setChecked(floatWanted && canDraw);
@@ -753,6 +768,7 @@ public class RunnerActivity extends Activity {
         try {
             d.append("androidUser=").append(android.os.Process.myUid() / 100000).append(" ");
             d.append("keepAlive=").append(KeepAliveService.isEnabled(this));
+            d.append(" stayActive=").append(KeepAliveService.isStayActiveEnabled(this));
             d.append(" silentAudio=").append(KeepAliveService.isSilentAudioEnabled(this))
                     .append(" (").append(KeepAliveService.silentAudioState(this)).append(")");
             d.append(" notificationsEnabled=").append(notificationsEnabled());

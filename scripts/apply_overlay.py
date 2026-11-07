@@ -131,6 +131,56 @@ ENGINE_PATCHES = [
 ]
 
 
+# Second set of patches: keep-alive support for virtual-app processes.
+#  - handleCreateService used to swallow every service created inside a virtual-app process. The
+#    host's own GuestKeepService (bound with BIND_IMPORTANT) must really be created there.
+#  - StayActive drops pause/stop messages while the BG button flag is set.
+KEEP_PATCH_MARKER = "StayActive.holdIfNeeded"
+KEEP_PATCHES = [
+    (
+        "fake/service/HCallbackProxy.java",
+        """                if (msg.what == BRActivityThreadH.get().CREATE_SERVICE()) {
+                    return handleCreateService(msg.obj);""",
+        """                if (BuildCompat.isPie() && msg.what == BRActivityThreadH.get().EXECUTE_TRANSACTION()
+                        && top.niunaijun.blackbox.fake.service.StayActive.holdIfNeeded(msg.obj)) {
+                    return true;
+                }
+                if (msg.what == BRActivityThreadH.get().CREATE_SERVICE()) {
+                    return handleCreateService(msg.obj);""",
+        1,
+    ),
+    (
+        "fake/service/HCallbackProxy.java",
+        """            if (!serviceInfo.name.equals(ProxyManifest.getProxyService(BActivityThread.getAppPid()))""",
+        """            if (serviceInfo.name.startsWith("top.niunaijun.blackboxa.runner.")) {
+                return false; // the host's own keep-alive service: let Android create it normally
+            }
+            if (!serviceInfo.name.equals(ProxyManifest.getProxyService(BActivityThread.getAppPid()))""",
+        1,
+    ),
+]
+
+
+def patch_keep_alive(engine: Path) -> None:
+    root = engine / ENGINE_ROOT
+    file = root / "fake/service/HCallbackProxy.java"
+    if not file.is_file():
+        fail(f"{file} not found; the engine layout changed")
+    text = file.read_text(encoding="utf-8")
+    if KEEP_PATCH_MARKER in text:
+        print("keep-alive engine patch already applied, skipping")
+        return
+    for rel, old, new, count in KEEP_PATCHES:
+        found = text.count(old)
+        if found != count:
+            fail(f"{rel}: expected {count} match(es) of the keep-alive patch anchor, found {found}; "
+                 "the engine changed, so pin an older engine_ref or update scripts/apply_overlay.py")
+    for rel, old, new, count in KEEP_PATCHES:
+        text = text.replace(old, new)
+    file.write_text(text, encoding="utf-8")
+    print("patched HCallbackProxy for keep-alive support")
+
+
 def patch_engine(engine: Path) -> None:
     root = engine / ENGINE_ROOT
     marker_file = root / "app/BActivityThread.java"
@@ -172,7 +222,11 @@ def main() -> None:
         fail(f"{manifest} not found; is {engine} a NewBlackbox checkout?")
 
     shutil.copytree(overlay_app, app, dirs_exist_ok=True)
+    overlay_core = repo / "overlay" / "Bcore"
+    if overlay_core.is_dir():
+        shutil.copytree(overlay_core, engine / "Bcore", dirs_exist_ok=True)
     patch_engine(engine)
+    patch_keep_alive(engine)
 
     text = manifest.read_text(encoding="utf-8")
     if "runner.RunnerActivity" in text:

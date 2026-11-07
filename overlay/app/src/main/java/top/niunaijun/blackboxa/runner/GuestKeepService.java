@@ -1,61 +1,27 @@
 package top.niunaijun.blackboxa.runner;
 
-import android.app.Notification;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
 import android.app.Service;
-import android.content.Context;
 import android.content.Intent;
-import android.os.Build;
+import android.os.Binder;
 import android.os.IBinder;
 
 /**
- * A foreground service that runs INSIDE one virtual-app process (":p0", ":p1", ...). Each
- * subclass is declared in the manifest with the matching android:process, so the process hosting
- * a virtual app gets real foreground-service priority instead of relying on the main process.
+ * A do-nothing service that is declared inside every virtual-app stub process (":p0", ":p1", ...).
+ * The host binds to it with BIND_IMPORTANT, which tells Android that the process hosting a
+ * virtual app is as important as whatever the host is doing, so it is not cached or killed.
+ *
+ * It is bind-only on purpose. An earlier version started it as a foreground service, but the
+ * engine does not let services run in virtual-app processes, so startForeground() was never
+ * called and Android killed the process after its foreground-start timeout. That killed the
+ * virtual app and made it reload from scratch.
  */
 public class GuestKeepService extends Service {
 
-    private static final String CHANNEL_ID = "bg_runner_guest";
+    private final IBinder binder = new Binder();
 
     @Override
     public IBinder onBind(Intent intent) {
-        return null;
-    }
-
-    @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
-        try {
-            String name = getClass().getSimpleName();
-            int index = 0;
-            try {
-                index = Integer.parseInt(name.substring(1));
-            } catch (Throwable ignored) {
-                // keep 0
-            }
-            startForeground(4300 + index, buildNotification(name));
-        } catch (Throwable ignored) {
-            // never crash the process that hosts a virtual app
-        }
-        return START_NOT_STICKY;
-    }
-
-    private Notification buildNotification(String processName) {
-        NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && nm != null) {
-            NotificationChannel channel = new NotificationChannel(
-                    CHANNEL_ID, "Virtual app running", NotificationManager.IMPORTANCE_LOW);
-            channel.setShowBadge(false);
-            nm.createNotificationChannel(channel);
-        }
-        Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                ? new Notification.Builder(this, CHANNEL_ID)
-                : new Notification.Builder(this);
-        return builder.setContentTitle("A virtual app is running")
-                .setContentText("Kept alive in process " + processName.toLowerCase())
-                .setSmallIcon(android.R.drawable.stat_notify_sync)
-                .setOngoing(true)
-                .build();
+        return binder;
     }
 
     public static class P0 extends GuestKeepService {
