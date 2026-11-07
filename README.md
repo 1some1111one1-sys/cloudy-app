@@ -50,11 +50,14 @@ raises their priority so the phone is less likely to stop them.
 
 ## Xiaomi / Redmi (HyperOS)
 
-Xiaomi's battery manager stops background apps unless they play audio, so keep-alive also
-loops one second of silence (the **Silent audio trick** button; it makes no sound and costs
-some battery). Also use **Xiaomi: autostart settings** and **Xiaomi: battery saver**, set
-battery to No restrictions, lock the app in recents, and use the BG button instead of
-swiping the app away.
+Xiaomi's battery manager is aggressive. Try these first: **Xiaomi: autostart settings**,
+**Xiaomi: battery saver** (No restrictions), lock the app in recents, and use the BG button
+instead of swiping the app away.
+
+If apps still stop, turn on **Backup: silent audio mode**. It plays inaudible audio and shows a
+media player in the notification shade, so the phone treats the app like a music app. It is off
+by default because it uses more battery. The switch shows its live status, and notifications
+must be allowed for the player to appear.
 
 ## What to expect
 
