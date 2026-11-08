@@ -35,6 +35,20 @@ COMPONENTS = """
             </intent-filter>
         </activity>
 
+        <activity
+            android:name="top.niunaijun.blackboxa.runner.AuthRedirectActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="ms-xal-0000000048183522" />
+            </intent-filter>
+        </activity>
+
         <service
             android:name="top.niunaijun.blackboxa.runner.KeepAliveService"
             android:exported="false" />
@@ -173,6 +187,23 @@ KEEP_PATCHES = [
             }
 
             ResolveInfo resolveInfo = BlackBoxCore.getBPackageManager().resolveActivity(""",
+        1,
+    ),
+    (
+        "fake/service/IActivityManagerProxy.java",
+        """            return method.invoke(who, args);
+        }
+
+        int getIntentIndex(Object[] args) {""",
+        """            // Apps may not broadcast to "all users" (the copied Google services do, and crashed).
+            if (args.length > 0 && args[args.length - 1] instanceof Integer
+                    && ((Integer) args[args.length - 1]) == -1) {
+                args[args.length - 1] = BlackBoxCore.getHostUserId();
+            }
+            return method.invoke(who, args);
+        }
+
+        int getIntentIndex(Object[] args) {""",
         1,
     ),
     (

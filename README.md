@@ -65,6 +65,12 @@ be heard. The debug log shows `BgMute: native audio hooks installed: N of 5` whe
 
 Web links (`http` and `https`) that a virtual app opens go to the phone's own browser.
 
+**Sign-in links that return to an app** (for example Minecraft's Microsoft sign-in, which opens your
+browser and then comes back through an `ms-xal-...://auth` address): Android only knows this
+app, not the apps inside it, so a small screen in this app catches that address and passes it to
+the container app. The build registers it for Minecraft's address. Other apps that sign in through
+the browser need their own address added to the manifest in `scripts/apply_overlay.py`.
+
 **Google Play services in the container** copies the phone's Google Play services, Play Store and
 Play Games into the container (the same switch the full BlackBox manager has). The phone must
 have them installed. Apps then find Google services as on a normal phone. Features that check the

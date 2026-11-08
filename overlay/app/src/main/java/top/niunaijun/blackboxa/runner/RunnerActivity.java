@@ -813,6 +813,9 @@ public class RunnerActivity extends Activity {
                         boolean keep = line.contains("BlackBox") || line.contains("AndroidRuntime")
                                 || line.contains("FATAL") || line.contains("SplashScreen")
                                 || line.contains("StayActive") || line.contains("BgMute")
+                                || line.contains("AuthRedirect") || line.contains("Xal") || line.contains("xal")
+                                || line.contains("BrowserLaunch") || line.contains("CustomTabs")
+                                || line.contains("chromium") || line.contains("Hook in")
                                 || (m.find() && "WEF".contains(m.group(1)));
                         if (!keep) {
                             continue;
