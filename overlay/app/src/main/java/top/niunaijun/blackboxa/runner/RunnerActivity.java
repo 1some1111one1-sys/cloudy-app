@@ -79,6 +79,7 @@ public class RunnerActivity extends Activity {
     private Switch stayActiveSwitch;
     private Switch muteSwitch;
     private Switch gmsSwitch;
+    private Switch openWithSwitch;
     private TextView gmsDescription;
     private TextView floatDescription;
     private TextView silentDescription;
@@ -242,6 +243,23 @@ public class RunnerActivity extends Activity {
         bgCard.addView(actionRow("Notification settings", v -> openNotificationSettings()));
         bgCard.addView(actionRow("App info", v -> openAppInfo()));
         root.addView(bgCard, cardParams());
+
+        // Opening files
+        LinearLayout filesCard = card();
+        filesCard.addView(sectionTitle("Opening files"));
+        openWithSwitch = addSwitchRow(filesCard, "Show in the \"Open with\" menu",
+                "When you open a file (PDF, document, image...) from another app, \"Open in BG App "
+                        + "Runner\" appears in the list. It lets you open the file with an app from "
+                        + "the container. The file is copied first, so changes are saved to the copy.",
+                (button, checked) -> {
+                    if (syncing) {
+                        return;
+                    }
+                    setOpenWithEnabled(checked);
+                    setStatus(checked ? "\"Open with\" menu entry is on."
+                            : "\"Open with\" menu entry is off.");
+                });
+        root.addView(filesCard, cardParams());
 
         // Google services
         LinearLayout gmsCard = card();
@@ -411,6 +429,7 @@ public class RunnerActivity extends Activity {
         keepSwitch.setChecked(KeepAliveService.isEnabled(this));
         stayActiveSwitch.setChecked(KeepAliveService.isStayActiveEnabled(this));
         muteSwitch.setChecked(KeepAliveService.isMuteGuestEnabled(this));
+        openWithSwitch.setChecked(isOpenWithEnabled());
         try {
             boolean gmsSupported = BlackBoxCore.get().isSupportGms();
             gmsSwitch.setEnabled(gmsSupported && !gmsBusy);
@@ -458,6 +477,30 @@ public class RunnerActivity extends Activity {
             startActivity(intent);
         } catch (Throwable t) {
             openAppInfo();
+        }
+    }
+
+    private ComponentName openWithComponent() {
+        return new ComponentName(this, OpenWithActivity.class);
+    }
+
+    private boolean isOpenWithEnabled() {
+        try {
+            return getPackageManager().getComponentEnabledSetting(openWithComponent())
+                    != PackageManager.COMPONENT_ENABLED_STATE_DISABLED;
+        } catch (Throwable t) {
+            return true;
+        }
+    }
+
+    private void setOpenWithEnabled(boolean enabled) {
+        try {
+            getPackageManager().setComponentEnabledSetting(openWithComponent(),
+                    enabled ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+                            : PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                    PackageManager.DONT_KILL_APP);
+        } catch (Throwable t) {
+            setStatus("Could not change the menu entry: " + t.getMessage());
         }
     }
 

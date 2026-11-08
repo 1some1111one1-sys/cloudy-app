@@ -65,6 +65,13 @@ be heard. The debug log shows `BgMute: native audio hooks installed: N of 5` whe
 
 Web links (`http` and `https`) that a virtual app opens go to the phone's own browser.
 
+**Open with:** when you open a file from another app (a PDF from your file manager, say), the
+list now includes **Open in BG App Runner**. It finds the apps in the container that can open that
+kind of file, asks which one if there are several, and opens the file there. Android only lets an
+app list itself once, so every container app is behind that one entry rather than listed by its
+own name. The file is copied into this app first, so edits are saved to the copy, not the original.
+Turn it off with the **Show in the "Open with" menu** switch.
+
 **Sign-in links that return to an app** (for example Minecraft's Microsoft sign-in, which opens your
 browser and then comes back through an `ms-xal-...://auth` address): Android only knows this
 app, not the apps inside it, so a small screen in this app catches that address and passes it to

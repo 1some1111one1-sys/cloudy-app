@@ -49,6 +49,26 @@ COMPONENTS = """
             </intent-filter>
         </activity>
 
+        <activity
+            android:name="top.niunaijun.blackboxa.runner.OpenWithActivity"
+            android:label="Open in BG App Runner"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+        </activity>
+
+        <provider
+            android:name="top.niunaijun.blackboxa.runner.OpenWithProvider"
+            android:authorities="${applicationId}.openwith"
+            android:exported="false" />
+
         <service
             android:name="top.niunaijun.blackboxa.runner.KeepAliveService"
             android:exported="false" />
