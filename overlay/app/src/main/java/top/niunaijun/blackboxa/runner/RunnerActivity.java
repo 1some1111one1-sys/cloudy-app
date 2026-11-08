@@ -201,8 +201,8 @@ public class RunnerActivity extends Activity {
         bgCard.addView(divider());
         muteSwitch = addSwitchRow(bgCard, "Mute app sound in background",
                 "After tapping BG, the app's own sound is muted so only this app's media player "
-                        + "stays. Works for most apps; games that use their own audio engine may "
-                        + "still be heard.",
+                        + "stays. Works for most apps and games; some low-latency "
+                        + "game audio may still be heard.",
                 (button, checked) -> {
                     if (syncing) {
                         return;
@@ -747,6 +747,7 @@ public class RunnerActivity extends Activity {
                         Matcher m = level.matcher(line);
                         boolean keep = line.contains("BlackBox") || line.contains("AndroidRuntime")
                                 || line.contains("FATAL") || line.contains("SplashScreen")
+                                || line.contains("StayActive") || line.contains("BgMute")
                                 || (m.find() && "WEF".contains(m.group(1)));
                         if (!keep) {
                             continue;

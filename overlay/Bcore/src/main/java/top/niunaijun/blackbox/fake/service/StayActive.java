@@ -36,7 +36,39 @@ public final class StayActive {
     private static final List<WeakReference<Object>> PLAYERS = new ArrayList<>();
     private static volatile boolean muted;
 
+    private static boolean nativeReady;
+
+    private static native int nativeInstall();
+
+    private static native void nativeSetMuted(boolean muted);
+
     private StayActive() {
+    }
+
+    /** Hooks the native audio layer once per process. Safe to call repeatedly. */
+    private static synchronized void ensureNative() {
+        if (nativeReady) {
+            return;
+        }
+        try {
+            System.loadLibrary("bgmute");
+            int hooks = nativeInstall();
+            nativeReady = hooks > 0;
+            Log.d(TAG, "native audio hooks: " + hooks + " of 5");
+        } catch (Throwable t) {
+            Log.w(TAG, "native audio mute unavailable", t);
+        }
+    }
+
+    /** Called once when a virtual app process starts, so its native tracks are tracked from the start. */
+    public static void prepare() {
+        try {
+            if (BActivityThread.getAppConfig() != null) {
+                ensureNative();
+            }
+        } catch (Throwable ignored) {
+            // optional feature
+        }
     }
 
     private static File flagFile() {
@@ -64,6 +96,7 @@ public final class StayActive {
             if (transaction == null || BActivityThread.getAppConfig() == null) {
                 return false; // not a virtual-app process
             }
+            ensureNative();
             Object request = BRClientTransaction.get(transaction).mLifecycleStateRequest();
             if (request == null) {
                 return false;
@@ -149,6 +182,14 @@ public final class StayActive {
 
     private static void setMuted(boolean mute) {
         muted = mute;
+        ensureNative();
+        if (nativeReady) {
+            try {
+                nativeSetMuted(mute);
+            } catch (Throwable ignored) {
+                // optional feature
+            }
+        }
         List<Object> players = new ArrayList<>();
         synchronized (PLAYERS) {
             for (WeakReference<Object> ref : PLAYERS) {

@@ -178,6 +178,35 @@ KEEP_PATCHES = [
 ]
 
 
+BGMUTE_MODULE = """
+
+# --- BG App Runner: native audio mute for virtual apps (added by scripts/apply_overlay.py)
+include $(CLEAR_VARS)
+LOCAL_MODULE := bgmute
+LOCAL_SRC_FILES := BgMute/BgMute.cpp
+LOCAL_C_INCLUDES += $(LOCAL_PATH)
+LOCAL_CPPFLAGS += -std=c++17 -fno-rtti -w
+LOCAL_LDFLAGS += -Wl,--gc-sections,-z,max-page-size=16384
+LOCAL_STATIC_LIBRARIES := libdobby xdl
+LOCAL_LDLIBS := -llog
+include $(BUILD_SHARED_LIBRARY)
+"""
+
+
+def patch_native_module(engine: Path) -> None:
+    mk = engine / "Bcore/src/main/cpp/Android.mk"
+    if not mk.is_file():
+        fail(f"{mk} not found; the engine layout changed")
+    text = mk.read_text(encoding="utf-8")
+    if "LOCAL_MODULE := bgmute" in text:
+        print("native bgmute module already registered, skipping")
+        return
+    if not (engine / "Bcore/src/main/cpp/BgMute/BgMute.cpp").is_file():
+        fail("overlay/Bcore/src/main/cpp/BgMute/BgMute.cpp was not copied into the engine")
+    mk.write_text(text.rstrip("\n") + "\n" + BGMUTE_MODULE, encoding="utf-8")
+    print("registered the bgmute native module")
+
+
 def patch_keep_alive(engine: Path) -> None:
     root = engine / ENGINE_ROOT
     marker = root / "fake/service/HCallbackProxy.java"
@@ -249,6 +278,7 @@ def main() -> None:
         shutil.copytree(overlay_core, engine / "Bcore", dirs_exist_ok=True)
     patch_engine(engine)
     patch_keep_alive(engine)
+    patch_native_module(engine)
 
     text = manifest.read_text(encoding="utf-8")
     if "runner.RunnerActivity" in text:

@@ -56,9 +56,10 @@ the app itself keeps running. Turn the switch off if an app misbehaves.
 
 **Mute app sound in background** (on by default): after you tap BG, the virtual app's own audio
 players are set to volume 0 and restored when you come back, so only this app's media player is
-left. It covers apps that play sound through Android's normal players (MediaPlayer, ExoPlayer,
-SoundPool, Java AudioTrack). A game that mixes sound in its own native engine (OpenSL ES / AAudio)
-is not reachable this way and may still be heard.
+left. It covers sound played through Android's normal players (MediaPlayer, ExoPlayer, SoundPool,
+Java AudioTrack) and, through a small native hook on the system's AudioTrack, most game audio
+(OpenSL ES and the older AAudio path). Low-latency AAudio streams that bypass AudioTrack may still
+be heard. The debug log shows `BgMute: native audio hooks installed: N of 5` when it is active.
 
 ## Xiaomi / Redmi (HyperOS)
 
@@ -97,6 +98,7 @@ must be allowed for the player to appear.
 | --- | --- |
 | `overlay/app/src/main/java/.../runner/RunnerActivity.java` | Launcher screen: pick APK, list, launch, stop, remove, keep-alive toggle |
 | `overlay/app/src/main/java/.../runner/KeepAliveService.java` | Foreground service with a partial wake lock |
-| `overlay/Bcore/.../StayActive.java` | Engine-side hook behind "Stay active in background" |
+| `overlay/Bcore/.../StayActive.java` | Engine-side hook behind "Stay active in background" and the Java side of the mute |
+| `overlay/Bcore/src/main/cpp/BgMute/BgMute.cpp` | Native AudioTrack hook that mutes game audio in the background |
 | `scripts/apply_overlay.py` | Copies the overlay into the engine and patches its manifest and sources |
 | `.github/workflows/build-apk.yml` | Builds the APK on GitHub Actions |
