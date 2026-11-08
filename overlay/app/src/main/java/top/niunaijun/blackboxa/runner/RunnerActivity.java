@@ -56,6 +56,9 @@ public class RunnerActivity extends Activity {
     private static final int REQ_PICK_APK = 1001;
     private static final int REQ_NOTIFICATIONS = 1002;
     private static final int USER_ID = 0;
+    private static final String GMS_DESCRIPTION = "Copies this phone's Google Play services, Play Store "
+            + "and Play Games into the container so apps can sign in and use Google features. "
+            + "Needs them installed on the phone.";
 
     private static final int COLOR_BACKGROUND = 0xFFF4F6F8;
     private static final int COLOR_CARD = 0xFFFFFFFF;
@@ -75,6 +78,8 @@ public class RunnerActivity extends Activity {
     private Switch silentSwitch;
     private Switch stayActiveSwitch;
     private Switch muteSwitch;
+    private Switch gmsSwitch;
+    private TextView gmsDescription;
     private TextView floatDescription;
     private TextView silentDescription;
     private static final String SILENT_DESCRIPTION = "Only turn this on if apps still stop with the options above. "
@@ -238,6 +243,20 @@ public class RunnerActivity extends Activity {
         bgCard.addView(actionRow("App info", v -> openAppInfo()));
         root.addView(bgCard, cardParams());
 
+        // Google services
+        LinearLayout gmsCard = card();
+        gmsCard.addView(sectionTitle("Google services"));
+        gmsSwitch = addSwitchRow(gmsCard, "Google Play services in the container",
+                GMS_DESCRIPTION,
+                (button, checked) -> {
+                    if (syncing) {
+                        return;
+                    }
+                    onGmsToggled(checked);
+                });
+        gmsDescription = lastDescription;
+        root.addView(gmsCard, cardParams());
+
         // Tools
         LinearLayout toolsCard = card();
         toolsCard.addView(sectionTitle("Tools"));
@@ -392,6 +411,15 @@ public class RunnerActivity extends Activity {
         keepSwitch.setChecked(KeepAliveService.isEnabled(this));
         stayActiveSwitch.setChecked(KeepAliveService.isStayActiveEnabled(this));
         muteSwitch.setChecked(KeepAliveService.isMuteGuestEnabled(this));
+        try {
+            boolean gmsSupported = BlackBoxCore.get().isSupportGms();
+            gmsSwitch.setEnabled(gmsSupported && !gmsBusy);
+            gmsSwitch.setChecked(gmsSupported && BlackBoxCore.get().isInstallGms(USER_ID));
+            gmsDescription.setText(gmsSupported ? GMS_DESCRIPTION
+                    : "This phone has no Google Play services to copy, so this is unavailable.");
+        } catch (Throwable ignored) {
+            gmsSwitch.setEnabled(false);
+        }
         boolean floatWanted = FloatingButtonService.isEnabled(this);
         boolean canDraw = FloatingButtonService.canDraw(this);
         floatSwitch.setChecked(floatWanted && canDraw);
@@ -431,6 +459,41 @@ public class RunnerActivity extends Activity {
         } catch (Throwable t) {
             openAppInfo();
         }
+    }
+
+    private boolean gmsBusy;
+
+    private void onGmsToggled(boolean checked) {
+        if (gmsBusy) {
+            return;
+        }
+        gmsBusy = true;
+        gmsSwitch.setEnabled(false);
+        setStatus(checked ? "Installing Google services. This can take a minute..."
+                : "Removing Google services...");
+        io.execute(() -> {
+            String message;
+            try {
+                if (checked) {
+                    InstallResult result = BlackBoxCore.get().installGms(USER_ID);
+                    message = result.success
+                            ? "Google services are installed in the container. Restart your apps."
+                            : "Could not install Google services: " + result.msg;
+                } else {
+                    boolean removed = BlackBoxCore.get().uninstallGms(USER_ID);
+                    message = removed ? "Google services removed." : "Could not remove Google services.";
+                }
+            } catch (Throwable t) {
+                message = "Google services failed: " + t.getMessage();
+            }
+            final String text = message;
+            ui.post(() -> {
+                gmsBusy = false;
+                setStatus(text);
+                syncSwitches();
+                refreshApps();
+            });
+        });
     }
 
     private void onFloatingToggled(boolean checked) {
@@ -787,6 +850,12 @@ public class RunnerActivity extends Activity {
         try {
             d.append("androidUser=").append(android.os.Process.myUid() / 100000).append(" ");
             d.append("keepAlive=").append(KeepAliveService.isEnabled(this));
+            try {
+                d.append("gmsInContainer=").append(BlackBoxCore.get().isInstallGms(USER_ID))
+                        .append("/gmsOnPhone=").append(BlackBoxCore.get().isSupportGms()).append(" ");
+            } catch (Throwable ignored) {
+                // not available
+            }
             d.append(" stayActive=").append(KeepAliveService.isStayActiveEnabled(this))
                     .append(" muteGuest=").append(KeepAliveService.isMuteGuestEnabled(this));
             d.append(" silentAudio=").append(KeepAliveService.isSilentAudioEnabled(this))

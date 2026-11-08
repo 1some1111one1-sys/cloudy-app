@@ -159,6 +159,23 @@ KEEP_PATCHES = [
         1,
     ),
     (
+        "fake/service/ActivityManagerCommonProxy.java",
+        """                intent.setData(Uri.parse("package:" + BlackBoxCore.getHostPkg()));
+            }
+
+            ResolveInfo resolveInfo = BlackBoxCore.getBPackageManager().resolveActivity(""",
+        """                intent.setData(Uri.parse("package:" + BlackBoxCore.getHostPkg()));
+            }
+
+            // Web links go to the phone's own browser, not to a virtual app's https filter.
+            if (top.niunaijun.blackbox.fake.service.ExternalLinks.isWebLink(intent)) {
+                return method.invoke(who, args);
+            }
+
+            ResolveInfo resolveInfo = BlackBoxCore.getBPackageManager().resolveActivity(""",
+        1,
+    ),
+    (
         "fake/service/IAudioServiceProxy.java",
         """    @ProxyMethod("requestAudioFocus")""",
         """    // Lets StayActive mute this virtual app's own players while it is in the background.

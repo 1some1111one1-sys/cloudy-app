@@ -1,6 +1,6 @@
 # BG App Runner
 
-An Android  app that runs other apps inside itself. You pick an APK, it installs into a virtual
+An Android app that runs other apps inside itself. You pick an APK, it installs into a virtual
 container, and you launch it from there. A foreground service plus a wake lock tries to keep it
 running while the screen is off or you are in another app.
 
@@ -60,6 +60,16 @@ left. It covers sound played through Android's normal players (MediaPlayer, ExoP
 Java AudioTrack) and, through a small native hook on the system's AudioTrack, most game audio
 (OpenSL ES and the older AAudio path). Low-latency AAudio streams that bypass AudioTrack may still
 be heard. The debug log shows `BgMute: native audio hooks installed: N of 5` when it is active.
+
+## Links and Google services
+
+Web links (`http` and `https`) that a virtual app opens go to the phone's own browser.
+
+**Google Play services in the container** copies the phone's Google Play services, Play Store and
+Play Games into the container (the same switch the full BlackBox manager has). The phone must
+have them installed. Apps then find Google services as on a normal phone. Features that check the
+app's original package name and signing key, such as Google sign-in or Play Games for some apps,
+can still refuse to work because the app is not running as itself.
 
 ## If apps still stop
 
