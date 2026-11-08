@@ -66,8 +66,9 @@ be heard. The debug log shows `BgMute: native audio hooks installed: N of 5` whe
 Web links (`http` and `https`) that a virtual app opens go to the phone's own browser.
 
 **Open with:** when you open a file from another app (a PDF from your file manager, say), the
-list now includes **Open in BG App Runner**. It finds the apps in the container that can open that
-kind of file, asks which one if there are several, and opens the file there. Android only lets an
+list now includes **Open in BG App Runner**. It lists every app in the container, with the ones that
+say they support that kind of file first, and sends the file to the one you pick, even if it does
+not declare support for it. It never refuses a file. Android only lets an
 app list itself once, so every container app is behind that one entry rather than listed by its
 own name. The file is copied into this app first, so edits are saved to the copy, not the original.
 Turn it off with the **Show in the "Open with" menu** switch.

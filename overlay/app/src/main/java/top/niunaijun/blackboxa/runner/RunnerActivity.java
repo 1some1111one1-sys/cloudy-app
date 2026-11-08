@@ -249,7 +249,7 @@ public class RunnerActivity extends Activity {
         filesCard.addView(sectionTitle("Opening files"));
         openWithSwitch = addSwitchRow(filesCard, "Show in the \"Open with\" menu",
                 "When you open a file (PDF, document, image...) from another app, \"Open in BG App "
-                        + "Runner\" appears in the list. It lets you open the file with an app from "
+                        + "Runner\" appears in the list. It lets you send the file to any app from "
                         + "the container. The file is copied first, so changes are saved to the copy.",
                 (button, checked) -> {
                     if (syncing) {

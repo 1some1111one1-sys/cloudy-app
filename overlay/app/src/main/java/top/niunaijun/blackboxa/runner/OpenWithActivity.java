@@ -51,7 +51,8 @@ public class OpenWithActivity extends Activity {
     private String type;
 
     private static class Choice {
-        ComponentName component;
+        String pkg;
+        ComponentName component; // a screen that declares it can open the file, or null
         String label;
         Drawable icon;
     }
@@ -90,28 +91,54 @@ public class OpenWithActivity extends Activity {
             Intent probe = new Intent(Intent.ACTION_VIEW);
             probe.setDataAndType(data, type);
             probe.addCategory(Intent.CATEGORY_DEFAULT);
-            List<ResolveInfo> matches = BlackBoxCore.getBPackageManager().queryIntentActivities(
-                    probe, PackageManager.GET_META_DATA, type, USER_ID);
-
-            PackageManager pm = getPackageManager();
-            final List<Choice> choices = new ArrayList<>();
+            List<ResolveInfo> matches = null;
+            try {
+                matches = BlackBoxCore.getBPackageManager().queryIntentActivities(
+                        probe, PackageManager.GET_META_DATA, type, USER_ID);
+            } catch (Throwable t) {
+                Log.w(TAG, "could not check which apps support the file", t); // list everything
+            }
+            // package name -> a screen that says it can open this kind of file
+            java.util.Map<String, ActivityInfo> supporting = new java.util.LinkedHashMap<>();
             if (matches != null) {
                 for (ResolveInfo match : matches) {
-                    ActivityInfo info = match.activityInfo;
-                    if (info == null) {
-                        continue;
+                    if (match.activityInfo != null
+                            && !supporting.containsKey(match.activityInfo.packageName)) {
+                        supporting.put(match.activityInfo.packageName, match.activityInfo);
                     }
-                    Choice choice = new Choice();
-                    choice.component = new ComponentName(info.packageName, info.name);
-                    choice.label = label(info, pm);
-                    try {
-                        choice.icon = info.applicationInfo.loadIcon(pm);
-                    } catch (Throwable ignored) {
-                        // no icon
-                    }
-                    choices.add(choice);
                 }
             }
+
+            // Every app in the container is an option, whether or not it declares support.
+            PackageManager pm = getPackageManager();
+            List<android.content.pm.PackageInfo> installed =
+                    BlackBoxCore.get().getInstalledPackages(0, USER_ID);
+            final List<Choice> supportsIt = new ArrayList<>();
+            final List<Choice> others = new ArrayList<>();
+            if (installed != null) {
+                for (android.content.pm.PackageInfo info : installed) {
+                    Choice choice = new Choice();
+                    choice.pkg = info.packageName;
+                    choice.label = info.packageName;
+                    try {
+                        if (info.applicationInfo != null) {
+                            choice.label = String.valueOf(info.applicationInfo.loadLabel(pm));
+                            choice.icon = info.applicationInfo.loadIcon(pm);
+                        }
+                    } catch (Throwable ignored) {
+                        // keep what we have
+                    }
+                    ActivityInfo screen = supporting.get(info.packageName);
+                    if (screen != null) {
+                        choice.component = new ComponentName(screen.packageName, screen.name);
+                        supportsIt.add(choice);
+                    } else {
+                        others.add(choice);
+                    }
+                }
+            }
+            final List<Choice> choices = new ArrayList<>(supportsIt);
+            choices.addAll(others);
             ui.post(() -> show(choices));
         } catch (Throwable t) {
             Log.w(TAG, "could not look for apps", t);
@@ -119,29 +146,11 @@ public class OpenWithActivity extends Activity {
         }
     }
 
-    private static String label(ActivityInfo info, PackageManager pm) {
-        String app = info.packageName;
-        try {
-            app = String.valueOf(info.applicationInfo.loadLabel(pm));
-        } catch (Throwable ignored) {
-            // keep the package name
-        }
-        try {
-            String screen = String.valueOf(info.loadLabel(pm));
-            if (!screen.isEmpty() && !screen.equals(app) && !screen.equals(info.name)) {
-                return app + " (" + screen + ")";
-            }
-        } catch (Throwable ignored) {
-            // app name only
-        }
-        return app;
-    }
-
     // ---------------------------------------------------------------- Choosing
 
     private void show(List<Choice> choices) {
         if (choices.isEmpty()) {
-            fail("No app in the container can open this file. Add one in BG App Runner first.");
+            fail("There are no apps in the container yet. Add one in BG App Runner first.");
             return;
         }
         if (choices.size() == 1) {
@@ -176,11 +185,21 @@ public class OpenWithActivity extends Activity {
                     icon.setImageDrawable(choice.icon);
                 }
                 row.addView(icon, new LinearLayout.LayoutParams(dp(40), dp(40)));
+                LinearLayout texts = new LinearLayout(OpenWithActivity.this);
+                texts.setOrientation(LinearLayout.VERTICAL);
+                texts.setPadding(dp(16), 0, 0, 0);
                 TextView name = new TextView(OpenWithActivity.this);
                 name.setText(choice.label);
                 name.setTextSize(16);
-                name.setPadding(dp(16), 0, 0, 0);
-                row.addView(name);
+                texts.addView(name);
+                if (choice.component == null) {
+                    TextView hint = new TextView(OpenWithActivity.this);
+                    hint.setText("Not known to support this file. It will be sent anyway.");
+                    hint.setTextSize(12);
+                    hint.setTextColor(0xFF777777);
+                    texts.addView(hint);
+                }
+                row.addView(texts);
                 return row;
             }
         };
@@ -201,12 +220,26 @@ public class OpenWithActivity extends Activity {
         Toast.makeText(this, "Opening in " + choice.label + "...", Toast.LENGTH_SHORT).show();
         io.execute(() -> {
             try {
+                ComponentName target = choice.component;
+                if (target == null) {
+                    // The app does not declare support: hand the file to its main screen anyway.
+                    Intent main = new Intent(Intent.ACTION_MAIN)
+                            .addCategory(Intent.CATEGORY_LAUNCHER).setPackage(choice.pkg);
+                    ResolveInfo launcher = BlackBoxCore.getBPackageManager()
+                            .resolveActivity(main, 0, null, USER_ID);
+                    if (launcher == null || launcher.activityInfo == null) {
+                        ui.post(() -> fail(choice.label + " has no screen to open."));
+                        return;
+                    }
+                    target = new ComponentName(launcher.activityInfo.packageName,
+                            launcher.activityInfo.name);
+                }
                 Uri copy = copyToShared(original.getData());
                 Intent intent = new Intent(Intent.ACTION_VIEW);
                 intent.setDataAndType(copy, type != null ? type : getContentResolver().getType(copy));
-                intent.setComponent(choice.component);
+                intent.setComponent(target);
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                Log.d(TAG, "opening " + copy + " in " + choice.component.flattenToShortString());
+                Log.d(TAG, "opening " + copy + " in " + intent.getComponent().flattenToShortString());
                 ui.post(() -> {
                     try {
                         BlackBoxCore.get().startActivity(intent, USER_ID);
