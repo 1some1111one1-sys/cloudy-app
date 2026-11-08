@@ -238,6 +238,8 @@ public class OpenWithActivity extends Activity {
                 Intent intent = new Intent(Intent.ACTION_VIEW);
                 intent.setDataAndType(copy, type != null ? type : getContentResolver().getType(copy));
                 intent.setComponent(target);
+                // The engine's launch screen needs the package name set, or it closes without opening.
+                intent.setPackage(target.getPackageName());
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 intent.putExtra("bg_runner_from_host", true);
                 Log.d(TAG, "opening " + copy + " in " + intent.getComponent().flattenToShortString());

@@ -53,6 +53,8 @@ public class AuthRedirectActivity extends Activity {
             }
             ActivityInfo activity = info.activityInfo;
             intent.setComponent(new ComponentName(activity.packageName, activity.name));
+            // The engine's launch screen needs the package name set, or it closes without opening.
+            intent.setPackage(activity.packageName);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             intent.putExtra("bg_runner_from_host", true);
             Log.d(TAG, "forwarding " + original.getData().getScheme() + " to " + activity.packageName
