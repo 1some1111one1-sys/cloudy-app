@@ -1,6 +1,6 @@
 # BG App Runner
 
-An Android app that runs other apps inside itself. You pick an APK, it installs into a virtual
+An Android  app that runs other apps inside itself. You pick an APK, it installs into a virtual
 container, and you launch it from there. A foreground service plus a wake lock tries to keep it
 running while the screen is off or you are in another app.
 
