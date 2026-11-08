@@ -239,6 +239,7 @@ public class OpenWithActivity extends Activity {
                 intent.setDataAndType(copy, type != null ? type : getContentResolver().getType(copy));
                 intent.setComponent(target);
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                intent.putExtra("bg_runner_from_host", true);
                 Log.d(TAG, "opening " + copy + " in " + intent.getComponent().flattenToShortString());
                 ui.post(() -> {
                     try {
@@ -248,7 +249,8 @@ public class OpenWithActivity extends Activity {
                         Toast.makeText(this, "Could not open the app: " + t.getMessage(),
                                 Toast.LENGTH_LONG).show();
                     }
-                    finish();
+                    // Stay on screen a moment so Android still sees this app in front.
+                    ui.postDelayed(this::finish, 1500);
                 });
             } catch (Throwable t) {
                 Log.w(TAG, "could not copy the file", t);

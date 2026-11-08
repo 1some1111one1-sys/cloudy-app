@@ -856,6 +856,7 @@ public class RunnerActivity extends Activity {
                         boolean keep = line.contains("BlackBox") || line.contains("AndroidRuntime")
                                 || line.contains("FATAL") || line.contains("SplashScreen")
                                 || line.contains("StayActive") || line.contains("BgMute")
+                                || line.contains("OpenWith") || line.contains("startActivityLocked")
                                 || line.contains("AuthRedirect") || line.contains("Xal") || line.contains("xal")
                                 || line.contains("BrowserLaunch") || line.contains("CustomTabs")
                                 || line.contains("chromium") || line.contains("Hook in")

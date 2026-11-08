@@ -227,6 +227,33 @@ KEEP_PATCHES = [
         1,
     ),
     (
+        "core/system/am/ActivityStack.java",
+        """        return startActivityInSourceTask(intent,
+                resolvedType, resultTo, resultWho, requestCode, flags, options, userId, topActivityRecord, activityInfo, launchModeFlags);
+    }
+""",
+        """        if (intent.getBooleanExtra("bg_runner_from_host", false)) {
+            // Started by BG App Runner itself (Open with, sign-in return): launch from the host
+            // instead of through the running app, which Android blocks while that app is hidden.
+            return startActivityFromHost(intent, activityInfo, userId, launchModeFlags);
+        }
+        return startActivityInSourceTask(intent,
+                resolvedType, resultTo, resultWho, requestCode, flags, options, userId, topActivityRecord, activityInfo, launchModeFlags);
+    }
+
+    private int startActivityFromHost(Intent intent, ActivityInfo activityInfo, int userId, int launchMode) {
+        ActivityRecord record = newActivityRecord(intent, activityInfo, null, userId);
+        Intent shadow = startActivityProcess(userId, intent, activityInfo, record);
+        shadow.setAction(UUID.randomUUID().toString());
+        shadow.addFlags(launchMode);
+        shadow.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        BlackBoxCore.getContext().startActivity(shadow);
+        return 0;
+    }
+""",
+        1,
+    ),
+    (
         "fake/service/IAudioServiceProxy.java",
         """    @ProxyMethod("requestAudioFocus")""",
         """    // Lets StayActive mute this virtual app's own players while it is in the background.
