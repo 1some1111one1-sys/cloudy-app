@@ -844,14 +844,31 @@ public class RunnerActivity extends Activity {
         io.execute(() -> {
             try {
                 Process process = Runtime.getRuntime().exec(
-                        new String[]{"logcat", "-d", "-v", "threadtime", "-t", "8000"});
+                        new String[]{"logcat", "-d", "-v", "threadtime", "-t", "30000"});
                 Pattern level = Pattern.compile("^\\S+\\s+\\S+\\s+\\d+\\s+\\d+\\s+([VDIWEF])\\s");
                 StringBuilder out = new StringBuilder();
+                final int[] hiddenCount = {0};
                 int lines = 0;
                 try (BufferedReader reader = new BufferedReader(
                         new InputStreamReader(process.getInputStream()))) {
                     String line;
+                    boolean skipTrace = false;
                     while ((line = reader.readLine()) != null) {
+                        // Crashes of the copied Google apps repeat endlessly and bury everything else.
+                        if (line.contains("AndroidRuntime")) {
+                            if (line.contains("Process: com.google.android.gms")
+                                    || line.contains("Process: com.android.vending")) {
+                                skipTrace = true;
+                                hiddenCount[0]++;
+                            } else if (line.contains("FATAL EXCEPTION")) {
+                                skipTrace = false;
+                            }
+                            if (skipTrace) {
+                                continue;
+                            }
+                        } else {
+                            skipTrace = false;
+                        }
                         Matcher m = level.matcher(line);
                         boolean keep = line.contains("BlackBox") || line.contains("AndroidRuntime")
                                 || line.contains("FATAL") || line.contains("SplashScreen")
@@ -860,6 +877,7 @@ public class RunnerActivity extends Activity {
                                 || line.contains("AuthRedirect") || line.contains("Xal") || line.contains("xal")
                                 || line.contains("BrowserLaunch") || line.contains("CustomTabs")
                                 || line.contains("chromium") || line.contains("Hook in")
+                                || line.contains("mojang") || line.contains("Minecraft") || line.contains("WebView")
                                 || (m.find() && "WEF".contains(m.group(1)));
                         if (!keep) {
                             continue;
@@ -870,6 +888,9 @@ public class RunnerActivity extends Activity {
                             out.delete(0, out.length() - 70000);
                         }
                     }
+                }
+                if (hiddenCount[0] > 0) {
+                    out.insert(0, "(" + hiddenCount[0] + " Google service crash traces hidden)\n");
                 }
                 final String text = "BG App Runner log, Android " + Build.VERSION.RELEASE
                         + ", " + Build.MANUFACTURER + " " + Build.MODEL
