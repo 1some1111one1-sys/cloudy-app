@@ -3,6 +3,7 @@ package top.niunaijun.blackboxa.runner;
 import android.app.Activity;
 import android.app.ActivityManager;
 import android.content.ClipData;
+import android.content.ComponentName;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
@@ -231,6 +232,8 @@ public class RunnerActivity extends Activity {
 
         bgCard.addView(divider());
         bgCard.addView(actionRow("Allow unrestricted battery use", v -> requestBatteryExemption()));
+        bgCard.addView(actionRow("Autostart in background", v -> openAutostart()));
+        bgCard.addView(actionRow("Battery saver (choose No restrictions)", v -> openBatterySaver()));
         bgCard.addView(actionRow("Notification settings", v -> openNotificationSettings()));
         bgCard.addView(actionRow("App info", v -> openAppInfo()));
         root.addView(bgCard, cardParams());
@@ -244,7 +247,7 @@ public class RunnerActivity extends Activity {
         root.addView(toolsCard, cardParams());
 
         TextView tip = text("Tip: leave a running app with the BG button, then press Home. "
-                + "Do not swipe this app away in recents.",
+                + "Do not swipe this app away in recents, and lock it there if your phone allows.",
                 12, COLOR_MUTED, false);
         tip.setPadding(dp(4), dp(4), dp(4), 0);
         root.addView(tip);
@@ -700,6 +703,31 @@ public class RunnerActivity extends Activity {
     private void openAppInfo() {
         startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                 Uri.parse("package:" + getPackageName())));
+    }
+
+    /** The phone's "autostart / run in background" screen, or App info where there is none. */
+    private void openAutostart() {
+        openFirstThatWorks(new Intent().setComponent(new ComponentName(
+                "com.miui.securitycenter",
+                "com.miui.permcenter.autostart.AutoStartManagementActivity")));
+    }
+
+    /** The phone's per-app battery saver screen, or App info where there is none. */
+    private void openBatterySaver() {
+        openFirstThatWorks(new Intent().setComponent(new ComponentName(
+                        "com.miui.powerkeeper", "com.miui.powerkeeper.ui.HiddenAppsConfigActivity"))
+                .putExtra("package_name", getPackageName())
+                .putExtra("package_label", "BG App Runner"));
+    }
+
+    /** Opens the given settings screen, or this app's info page if the phone does not have it. */
+    private void openFirstThatWorks(Intent intent) {
+        try {
+            startActivity(intent);
+        } catch (Throwable t) {
+            toast("That screen is not available on this phone. Opening App info instead.");
+            openAppInfo();
+        }
     }
 
     // ---------------------------------------------------------------- Debug log

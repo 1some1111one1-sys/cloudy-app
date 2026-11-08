@@ -63,9 +63,9 @@ be heard. The debug log shows `BgMute: native audio hooks installed: N of 5` whe
 
 ## If apps still stop
 
-Phone battery managers can be aggressive. Allow unrestricted battery use, allow autostart in
-App info if your phone has it, lock the app in recents, and use the BG button
-instead of swiping the app away.
+Phone battery managers can be aggressive. Try these first: **Autostart in background** and
+**Battery saver** (No restrictions) in the app, lock the app in recents, and use the BG button
+instead of swiping the app away. On phones without those screens, the buttons open App info.
 
 If that is not enough, turn on **Backup: silent audio mode**. It plays inaudible audio and shows a
 media player in the notification shade, so the phone treats the app like a music app. It is off
