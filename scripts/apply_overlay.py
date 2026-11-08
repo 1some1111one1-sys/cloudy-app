@@ -254,6 +254,45 @@ KEEP_PATCHES = [
         1,
     ),
     (
+        "fake/service/IPackageManagerProxy.java",
+        """            if (AppSystemEnv.isOpenPackage(packageName)) {
+                return method.invoke(who, args);
+            }
+            return null;""",
+        """            if (AppSystemEnv.isOpenPackage(packageName)
+                    || top.niunaijun.blackbox.fake.service.ExternalLinks.isBrowserPackage(packageName)) {
+                return method.invoke(who, args);
+            }
+            return null;""",
+        2,
+    ),
+    (
+        "fake/service/IActivityManagerProxy.java",
+        """                if (ProxyManifest.isProxy((String) auth)) {
+                    return method.invoke(who, args);
+                }
+
+                if (BuildCompat.isQ()) {
+                    args[1] = BlackBoxCore.getHostPkg();""",
+        """                if (ProxyManifest.isProxy((String) auth)) {
+                    return method.invoke(who, args);
+                }
+
+                // BG App Runner's own provider for files handed to container apps ("Open with").
+                if (((String) auth).equals(BlackBoxCore.getHostPkg() + ".openwith")) {
+                    if (args.length > 1 && args[1] instanceof String) {
+                        args[1] = BlackBoxCore.getHostPkg();
+                    }
+                    content = method.invoke(who, args);
+                    ContentProviderDelegate.update(content, (String) auth);
+                    return content;
+                }
+
+                if (BuildCompat.isQ()) {
+                    args[1] = BlackBoxCore.getHostPkg();""",
+        1,
+    ),
+    (
         "fake/service/IAudioServiceProxy.java",
         """    @ProxyMethod("requestAudioFocus")""",
         """    // Lets StayActive mute this virtual app's own players while it is in the background.
