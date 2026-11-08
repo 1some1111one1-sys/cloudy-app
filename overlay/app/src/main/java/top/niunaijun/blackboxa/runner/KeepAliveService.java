@@ -277,7 +277,7 @@ public class KeepAliveService extends Service {
 
     // ------------------------------------------------------------ Silent audio
     //
-    // Optional backup, off by default (it costs some battery). Many phones, Xiaomi HyperOS in
+    // Optional backup, off by default (it costs some battery). Many phones, some Xiaomi models in
     // particular, leave apps alone while they play audio. To look like a real music player this
     // streams faint, inaudible noise (not pure zeros, which some phones skip as "no audio"),
     // publishes a MediaSession in the PLAYING state and shows a media-style notification, so the

@@ -36,7 +36,7 @@ manager.
 3. Turn on **Background keep-alive** and allow the notification.
 4. Tap **Allow unrestricted battery use** and approve the dialog.
 5. Open **App info** and allow autostart / background activity if your phone has that option
-   (Xiaomi, Oppo, Vivo, Realme, Samsung, Huawei all hide it under different names).
+   (many brands hide it under different names).
 
 ## Floating button
 
@@ -61,13 +61,13 @@ Java AudioTrack) and, through a small native hook on the system's AudioTrack, mo
 (OpenSL ES and the older AAudio path). Low-latency AAudio streams that bypass AudioTrack may still
 be heard. The debug log shows `BgMute: native audio hooks installed: N of 5` when it is active.
 
-## Xiaomi / Redmi (HyperOS)
+## If apps still stop
 
-Xiaomi's battery manager is aggressive. Try these first: **Xiaomi: autostart settings**,
-**Xiaomi: battery saver** (No restrictions), lock the app in recents, and use the BG button
+Phone battery managers can be aggressive. Allow unrestricted battery use, allow autostart in
+App info if your phone has it, lock the app in recents, and use the BG button
 instead of swiping the app away.
 
-If apps still stop, turn on **Backup: silent audio mode**. It plays inaudible audio and shows a
+If that is not enough, turn on **Backup: silent audio mode**. It plays inaudible audio and shows a
 media player in the notification shade, so the phone treats the app like a music app. It is off
 by default because it uses more battery. The switch shows its live status, and notifications
 must be allowed for the player to appear.
