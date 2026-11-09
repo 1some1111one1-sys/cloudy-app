@@ -28,7 +28,7 @@ COMPONENTS = """
             android:name="top.niunaijun.blackboxa.runner.RunnerActivity"
             android:label="BG App Runner"
             android:exported="true"
-            android:theme="@android:style/Theme.Material.Light.NoActionBar">
+            android:theme="@style/RunnerTheme">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -172,6 +172,16 @@ ENGINE_PATCHES = [
 #  - StayActive drops pause/stop messages while the BG button flag is set.
 KEEP_PATCH_MARKER = "StayActive.holdIfNeeded"
 KEEP_PATCHES = [
+    (
+        # The engine ships with a built-in "send logs" feature that uploads the whole log of this
+        # app (and crash reports, automatically) to a server run by the engine's author. Nobody
+        # asked for that and logs can hold sign-in links, so it is switched off: with no chat id
+        # configured the upload code returns before doing anything.
+        "app/configuration/ClientConfiguration.java",
+        'return "-1003719573856";',
+        'return ""; // log uploads to a third-party server are switched off',
+        1,
+    ),
     (
         # When the app's process is not running yet, the engine starts it and re-queues the launch
         # with a plain "launcher" intent, which throws away what the caller asked for (a file to

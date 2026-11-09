@@ -31,12 +31,27 @@ manager.
 
 ## Use it
 
-1. Open **BG App Runner** and tap **Pick APK and install**.
+The main screen is laid out top to bottom:
+
+- **BlackBox manager** (the big card at the top): the engine's own manager. Install apps from your
+  phone or a file, create home-screen shortcuts, clear app data, set a fake location, Google
+  services and settings. Its screens use the same colours as the main screen.
+- **Your apps**: everything installed in the container. Tap a row (or **Launch**) to start an app;
+  the three dots stop it or remove it (removing asks first, because it deletes the app's data).
+  **+ Add APK** installs a single APK file.
+- **Keep running in the background**, **Sound**, **Allow on this phone**, **Opening files**,
+  **Google services**, **Help**: the settings, grouped by purpose. The two phone settings the app can
+  read (battery use, notifications) show **Allowed / Not allowed** and **On / Blocked**.
+- Messages appear in a bar at the bottom of the screen and go away by themselves.
+
+Getting started:
+
+1. Open **BG App Runner** and tap **Open BlackBox manager** (or **+ Add APK**) to add an app.
 2. Tap **Launch** next to the app that appears.
-3. Turn on **Background keep-alive** and allow the notification.
+3. Turn on **Keep apps running** and allow the notification.
 4. Tap **Allow unrestricted battery use** and approve the dialog.
-5. Open **App info** and allow autostart / background activity if your phone has that option
-   (many brands hide it under different names).
+5. Open **Autostart in background** and **Battery saver** (or **App info**) and allow background
+   activity if your phone has that option (many brands hide it under different names).
 
 ## Floating button
 
@@ -96,6 +111,13 @@ media player in the notification shade, so the phone treats the app like a music
 by default because it uses more battery. The switch shows its live status, and notifications
 must be allowed for the player to appear.
 
+## Privacy
+
+The engine this app is built on contains a built-in "send logs" feature: it uploads the app's whole
+log, with device details, to a server run by the engine's author, and does so automatically after a
+crash. This build switches it off (`apply_overlay.py` blanks the chat id it needs) and removes the
+**Send Logs** entry from the manager's settings. **Copy debug log** only copies to your clipboard.
+
 ## What to expect
 
 - On phones where the app runs in a second user (Xiaomi Second space, work profile, "user 10"),
@@ -120,7 +142,8 @@ must be allowed for the player to appear.
 
 | Path | What it is |
 | --- | --- |
-| `overlay/app/src/main/java/.../runner/RunnerActivity.java` | Launcher screen: pick APK, list, launch, stop, remove, keep-alive toggle |
+| `overlay/app/src/main/java/.../runner/RunnerActivity.java` | Main screen: BlackBox manager card, app list, grouped settings |
+| `overlay/app/src/main/res/` | Colours, theme and layouts that restyle the BlackBox manager screens |
 | `overlay/app/src/main/java/.../runner/KeepAliveService.java` | Foreground service with a partial wake lock |
 | `overlay/Bcore/.../StayActive.java` | Engine-side hook behind "Stay active in background" and the Java side of the mute |
 | `overlay/Bcore/src/main/cpp/BgMute/BgMute.cpp` | Native AudioTrack hook that mutes game audio in the background |

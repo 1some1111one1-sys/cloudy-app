@@ -2,6 +2,7 @@ package top.niunaijun.blackboxa.runner;
 
 import android.app.Activity;
 import android.app.ActivityManager;
+import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.ComponentName;
 import android.content.ClipboardManager;
@@ -9,9 +10,15 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.content.res.ColorStateList;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
 import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -19,12 +26,14 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
 import android.provider.Settings;
-import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.CompoundButton;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.PopupMenu;
 import android.widget.ScrollView;
 import android.widget.Switch;
 import android.widget.TextView;
@@ -36,6 +45,7 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -48,8 +58,9 @@ import top.niunaijun.blackbox.entity.pm.InstallResult;
 import top.niunaijun.blackboxa.view.main.WelcomeActivity;
 
 /**
- * Main screen: add an APK, launch the apps installed in the container, and control how they are
- * kept alive in the background.
+ * Main screen. From the top: the BlackBox manager (the main way to add and manage apps), the apps
+ * that are installed in the container, then the settings that decide how they behave, grouped by
+ * purpose.
  */
 public class RunnerActivity extends Activity {
 
@@ -59,19 +70,48 @@ public class RunnerActivity extends Activity {
     private static final String GMS_DESCRIPTION = "Copies this phone's Google Play services, Play Store "
             + "and Play Games into the container so apps can sign in and use Google features. "
             + "Needs them installed on the phone.";
+    private static final String SILENT_DESCRIPTION = "Only turn this on if apps still stop with the options above. "
+            + "Plays inaudible audio and shows a media player, so the phone treats this app like a music app. "
+            + "Uses more battery.";
+    private static final String FLOAT_DESCRIPTION = "A button over a running app. Tap it to keep the app "
+            + "running and go home.";
 
-    private static final int COLOR_BACKGROUND = 0xFFF4F6F8;
+    private static final int COLOR_BACKGROUND = 0xFFF3F5F9;
     private static final int COLOR_CARD = 0xFFFFFFFF;
-    private static final int COLOR_BORDER = 0xFFE5E7EB;
+    private static final int COLOR_BORDER = 0xFFE3E7EE;
     private static final int COLOR_TEXT = 0xFF111827;
-    private static final int COLOR_MUTED = 0xFF6B7280;
-    private static final int COLOR_ACCENT = 0xFF1E88E5;
-    private static final int COLOR_DANGER = 0xFFD32F2F;
+    private static final int COLOR_MUTED = 0xFF5B6575;
+    private static final int COLOR_ACCENT = 0xFF1565C0;
+    private static final int COLOR_ACCENT_SOFT = 0xFFE7F0FB;
+    private static final int COLOR_SUCCESS = 0xFF2E7D32;
+    private static final int COLOR_SUCCESS_SOFT = 0xFFE6F4E8;
+    private static final int COLOR_WARN = 0xFF9A5B00;
+    private static final int COLOR_WARN_SOFT = 0xFFFDF0DA;
+    private static final int COLOR_DANGER = 0xFFC62828;
+    private static final int COLOR_NEUTRAL_SOFT = 0xFFEAEDF2;
+    private static final int COLOR_HERO_START = 0xFF0F172A;
+    private static final int COLOR_HERO_END = 0xFF1E3A8A;
+    private static final int COLOR_SNACKBAR = 0xFF1F2937;
+
+    private static final int STATUS_VISIBLE_MS = 8000;
 
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final Handler ui = new Handler(Looper.getMainLooper());
 
+    // Message bar at the bottom of the screen (declared first: the runnable below uses it).
+    private LinearLayout statusBar;
     private TextView status;
+    private final Runnable hideStatus = new Runnable() {
+        @Override
+        public void run() {
+            if (statusBar != null) {
+                statusBar.setVisibility(View.GONE);
+            }
+        }
+    };
+
+    private TextView keepPill;
+    private TextView appsTitle;
     private LinearLayout appList;
     private Switch keepSwitch;
     private Switch floatSwitch;
@@ -83,10 +123,24 @@ public class RunnerActivity extends Activity {
     private TextView gmsDescription;
     private TextView floatDescription;
     private TextView silentDescription;
-    private static final String SILENT_DESCRIPTION = "Only turn this on if apps still stop with the options above. "
-            + "Plays inaudible audio and shows a media player, so the phone treats this app like a music app. "
-            + "Uses more battery.";
+    private TextView batteryChip;
+    private TextView notificationChip;
+    private TextView lastDescription;
     private boolean syncing;
+    private boolean gmsBusy;
+
+    /** One app installed in the container, with everything needed to draw its row. */
+    private static final class AppItem {
+        final String label;
+        final String pkg;
+        final Drawable icon;
+
+        AppItem(String label, String pkg, Drawable icon) {
+            this.label = label;
+            this.pkg = pkg;
+            this.icon = icon;
+        }
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -95,9 +149,14 @@ public class RunnerActivity extends Activity {
 
         if (Build.VERSION.SDK_INT >= 21) {
             getWindow().setStatusBarColor(COLOR_BACKGROUND);
+            getWindow().setNavigationBarColor(COLOR_BACKGROUND);
         }
         if (Build.VERSION.SDK_INT >= 23) {
-            getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+            int flags = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+            if (Build.VERSION.SDK_INT >= 26) {
+                flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+            }
+            getWindow().getDecorView().setSystemUiVisibility(flags);
         }
         if (Build.VERSION.SDK_INT >= 33
                 && checkSelfPermission("android.permission.POST_NOTIFICATIONS")
@@ -125,6 +184,7 @@ public class RunnerActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        ui.removeCallbacks(hideStatus);
         io.shutdown();
         super.onDestroy();
     }
@@ -134,40 +194,18 @@ public class RunnerActivity extends Activity {
     private View buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(16), dp(20), dp(16), dp(28));
+        // Extra room at the bottom so the message bar never covers the last row for good.
+        root.setPadding(dp(16), dp(20), dp(16), dp(96));
 
-        // Header
-        root.addView(text("BG App Runner", 26, COLOR_TEXT, true));
-        TextView subtitle = text("Run another app inside this one and keep it alive in the background.",
-                14, COLOR_MUTED, false);
-        subtitle.setPadding(0, dp(4), 0, dp(14));
-        root.addView(subtitle);
-
-        TextView addApk = filledButton("Add APK", v -> pickApk());
-        addApk.setTextSize(16);
-        addApk.setPadding(dp(16), dp(14), dp(16), dp(14));
-        root.addView(addApk, cardParams());
-
-        // Status
-        LinearLayout statusCard = card();
-        status = text("Pick an APK to run it inside this app.", 14, COLOR_TEXT, false);
-        statusCard.addView(status);
-        root.addView(statusCard, cardParams());
-
-        // Apps
-        LinearLayout appsCard = card();
-        appsCard.addView(sectionTitle("Apps in the container"));
-        appList = new LinearLayout(this);
-        appList.setOrientation(LinearLayout.VERTICAL);
-        appsCard.addView(appList);
-        root.addView(appsCard, cardParams());
+        root.addView(buildHeader());
+        root.addView(buildManagerHero(), block(18));
+        root.addView(buildAppsSection(), block(0));
 
         // Background
-        LinearLayout bgCard = card();
-        bgCard.addView(sectionTitle("Keep running in the background"));
-
-        keepSwitch = addSwitchRow(bgCard, "Keep apps running",
-                "Foreground service and wake lock. Turn this on first.",
+        LinearLayout keep = section(root, "Keep running in the background");
+        keepSwitch = switchRow(keep, "Keep apps running",
+                "Runs a service with a notification and keeps the phone awake for your apps. "
+                        + "Turn this on first.",
                 (button, checked) -> {
                     if (syncing) {
                         return;
@@ -179,11 +217,9 @@ public class RunnerActivity extends Activity {
                         KeepAliveService.stop(this);
                         setStatus("Keep-alive turned off.");
                     }
+                    updatePill(checked);
                 });
-
-        bgCard.addView(divider());
-        floatSwitch = addSwitchRow(bgCard, "Floating BG button",
-                "A button over a running app. Tap it to keep the app running and go home.",
+        floatSwitch = switchRow(keep, "Floating BG button", FLOAT_DESCRIPTION,
                 (button, checked) -> {
                     if (syncing) {
                         return;
@@ -191,9 +227,7 @@ public class RunnerActivity extends Activity {
                     onFloatingToggled(checked);
                 });
         floatDescription = lastDescription;
-
-        bgCard.addView(divider());
-        stayActiveSwitch = addSwitchRow(bgCard, "Stay active in background",
+        stayActiveSwitch = switchRow(keep, "Stay active in background",
                 "After tapping BG, the app is told it is still on screen so it does not pause or "
                         + "reload. Experimental: turn it off if an app misbehaves.",
                 (button, checked) -> {
@@ -204,8 +238,9 @@ public class RunnerActivity extends Activity {
                     setStatus(checked ? "Stay active is on." : "Stay active is off.");
                 });
 
-        bgCard.addView(divider());
-        muteSwitch = addSwitchRow(bgCard, "Mute app sound in background",
+        // Sound
+        LinearLayout sound = section(root, "Sound");
+        muteSwitch = switchRow(sound, "Mute app sound in background",
                 "After tapping BG, the app's own sound is muted so only this app's media player "
                         + "stays. Works for most apps and games; some low-latency "
                         + "game audio may still be heard.",
@@ -217,10 +252,7 @@ public class RunnerActivity extends Activity {
                     setStatus(checked ? "The app's sound will be muted in the background."
                             : "The app's sound will keep playing in the background.");
                 });
-
-        bgCard.addView(divider());
-        silentSwitch = addSwitchRow(bgCard, "Backup: silent audio mode",
-                SILENT_DESCRIPTION,
+        silentSwitch = switchRow(sound, "Backup: silent audio mode", SILENT_DESCRIPTION,
                 (button, checked) -> {
                     if (syncing) {
                         return;
@@ -236,18 +268,23 @@ public class RunnerActivity extends Activity {
                 });
         silentDescription = lastDescription;
 
-        bgCard.addView(divider());
-        bgCard.addView(actionRow("Allow unrestricted battery use", v -> requestBatteryExemption()));
-        bgCard.addView(actionRow("Autostart in background", v -> openAutostart()));
-        bgCard.addView(actionRow("Battery saver (choose No restrictions)", v -> openBatterySaver()));
-        bgCard.addView(actionRow("Notification settings", v -> openNotificationSettings()));
-        bgCard.addView(actionRow("App info", v -> openAppInfo()));
-        root.addView(bgCard, cardParams());
+        // Phone settings
+        LinearLayout phone = section(root, "Allow on this phone");
+        batteryChip = navRow(phone, "Allow unrestricted battery use",
+                "Stops the phone from pausing your apps.", true, v -> requestBatteryExemption());
+        navRow(phone, "Autostart in background",
+                "Lets the app start itself and keep running.", false, v -> openAutostart());
+        navRow(phone, "Battery saver (choose No restrictions)",
+                "The phone's own per-app battery limit.", false, v -> openBatterySaver());
+        notificationChip = navRow(phone, "Notification settings",
+                "Needed for the keep-alive notification and the media player.", true,
+                v -> openNotificationSettings());
+        navRow(phone, "App info", "Permissions, storage and the rest of this app's settings.",
+                false, v -> openAppInfo());
 
-        // Opening files
-        LinearLayout filesCard = card();
-        filesCard.addView(sectionTitle("Opening files"));
-        openWithSwitch = addSwitchRow(filesCard, "Show in the \"Open with\" menu",
+        // Files
+        LinearLayout files = section(root, "Opening files");
+        openWithSwitch = switchRow(files, "Show in the \"Open with\" menu",
                 "When you open a file (PDF, document, image...) from another app, \"Open in BG App "
                         + "Runner\" appears in the list. It lets you send the file to any app from "
                         + "the container. The file is copied first, so changes are saved to the copy.",
@@ -259,13 +296,10 @@ public class RunnerActivity extends Activity {
                     setStatus(checked ? "\"Open with\" menu entry is on."
                             : "\"Open with\" menu entry is off.");
                 });
-        root.addView(filesCard, cardParams());
 
         // Google services
-        LinearLayout gmsCard = card();
-        gmsCard.addView(sectionTitle("Google services"));
-        gmsSwitch = addSwitchRow(gmsCard, "Google Play services in the container",
-                GMS_DESCRIPTION,
+        LinearLayout google = section(root, "Google services");
+        gmsSwitch = switchRow(google, "Google Play services in the container", GMS_DESCRIPTION,
                 (button, checked) -> {
                     if (syncing) {
                         return;
@@ -273,87 +307,275 @@ public class RunnerActivity extends Activity {
                     onGmsToggled(checked);
                 });
         gmsDescription = lastDescription;
-        root.addView(gmsCard, cardParams());
 
-        // Tools
-        LinearLayout toolsCard = card();
-        toolsCard.addView(sectionTitle("Tools"));
-        toolsCard.addView(actionRow("Open full BlackBox manager",
-                v -> startActivity(new Intent(this, WelcomeActivity.class))));
-        toolsCard.addView(actionRow("Copy debug log (for problems)", v -> copyDebugLog()));
-        root.addView(toolsCard, cardParams());
+        // Help
+        LinearLayout help = section(root, "Help");
+        navRow(help, "Copy debug log",
+                "Copies recent errors so you can paste them into the chat when something goes wrong.",
+                false, v -> copyDebugLog());
 
         TextView tip = text("Tip: leave a running app with the BG button, then press Home. "
                 + "Do not swipe this app away in recents, and lock it there if your phone allows.",
                 12, COLOR_MUTED, false);
-        tip.setPadding(dp(4), dp(4), dp(4), 0);
+        tip.setLineSpacing(dp(2), 1f);
+        tip.setPadding(dp(4), dp(18), dp(4), 0);
         root.addView(tip);
 
         ScrollView scroll = new ScrollView(this);
-        scroll.setBackgroundColor(COLOR_BACKGROUND);
         scroll.setFillViewport(true);
         scroll.addView(root, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        return scroll;
+
+        FrameLayout frame = new FrameLayout(this);
+        frame.setBackgroundColor(COLOR_BACKGROUND);
+        frame.addView(scroll, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        frame.addView(buildStatusBar());
+        return frame;
     }
 
-    private TextView lastDescription;
+    private View buildHeader() {
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.VERTICAL);
 
-    private Switch addSwitchRow(LinearLayout parent, String title, String description,
-                                CompoundButton.OnCheckedChangeListener listener) {
+        LinearLayout titleRow = new LinearLayout(this);
+        titleRow.setGravity(Gravity.CENTER_VERTICAL);
+        titleRow.addView(text("BG App Runner", 26, COLOR_TEXT, true),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        keepPill = text("", 12, COLOR_MUTED, true);
+        keepPill.setGravity(Gravity.CENTER_VERTICAL);
+        keepPill.setCompoundDrawablePadding(dp(6));
+        titleRow.addView(keepPill);
+        header.addView(titleRow);
+
+        TextView subtitle = text("Run apps inside this one and keep them alive in the background.",
+                14, COLOR_MUTED, false);
+        subtitle.setPadding(0, dp(4), 0, 0);
+        header.addView(subtitle);
+
+        updatePill(KeepAliveService.isEnabled(this));
+        return header;
+    }
+
+    /** The BlackBox manager: the big, obvious way to add, organise and configure apps. */
+    private View buildManagerHero() {
+        LinearLayout hero = new LinearLayout(this);
+        hero.setOrientation(LinearLayout.VERTICAL);
+        hero.setPadding(dp(18), dp(18), dp(18), dp(18));
+        GradientDrawable background = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                new int[]{COLOR_HERO_START, COLOR_HERO_END});
+        background.setCornerRadius(dp(20));
+        hero.setBackground(background);
+        if (Build.VERSION.SDK_INT >= 21) {
+            hero.setElevation(dp(3));
+        }
+        hero.setClickable(true);
+        hero.setOnClickListener(v -> openManager());
+
+        LinearLayout top = new LinearLayout(this);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+
+        FrameLayout tile = new FrameLayout(this);
+        tile.setBackground(rounded(0x26FFFFFF, 14, 0, 0));
+        tile.addView(new GridIconView(this), new FrameLayout.LayoutParams(dp(26), dp(26), Gravity.CENTER));
+        top.addView(tile, new LinearLayout.LayoutParams(dp(52), dp(52)));
+
+        LinearLayout titles = new LinearLayout(this);
+        titles.setOrientation(LinearLayout.VERTICAL);
+        titles.setPadding(dp(14), 0, 0, 0);
+        titles.addView(text("BlackBox manager", 20, Color.WHITE, true));
+        titles.addView(text("Install and manage your apps", 13, 0xCCFFFFFF, false));
+        top.addView(titles, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        hero.addView(top);
+
+        TextView body = text("Install apps from your phone, create shortcuts, clear app data, "
+                + "set a fake location and change settings.", 14, 0xE6FFFFFF, false);
+        body.setLineSpacing(dp(2), 1f);
+        body.setPadding(0, dp(14), 0, 0);
+        hero.addView(body);
+
+        TextView open = text("Open BlackBox manager  →", 15, COLOR_HERO_START, true);
+        open.setGravity(Gravity.CENTER);
+        open.setBackground(rounded(Color.WHITE, 14, 0, 0));
+        open.setClickable(true);
+        open.setOnClickListener(v -> openManager());
+        LinearLayout.LayoutParams openParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(48));
+        openParams.topMargin = dp(16);
+        hero.addView(open, openParams);
+        return hero;
+    }
+
+    private View buildAppsSection() {
+        LinearLayout section = new LinearLayout(this);
+        section.setOrientation(LinearLayout.VERTICAL);
+
+        LinearLayout head = new LinearLayout(this);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        appsTitle = overline("Your apps");
+        head.addView(appsTitle, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        head.addView(tonalButton("+ Add APK", v -> pickApk()));
+        LinearLayout.LayoutParams headParams = block(22);
+        headParams.bottomMargin = dp(8);
+        section.addView(head, headParams);
+
+        LinearLayout card = groupCard();
+        appList = new LinearLayout(this);
+        appList.setOrientation(LinearLayout.VERTICAL);
+        card.addView(appList);
+        section.addView(card, block(0));
+        return section;
+    }
+
+    /** The message bar that floats at the bottom of the screen. */
+    private View buildStatusBar() {
+        statusBar = new LinearLayout(this);
+        statusBar.setOrientation(LinearLayout.HORIZONTAL);
+        statusBar.setGravity(Gravity.CENTER_VERTICAL);
+        statusBar.setPadding(dp(16), dp(12), dp(8), dp(12));
+        statusBar.setBackground(rounded(COLOR_SNACKBAR, 14, 0, 0));
+        if (Build.VERSION.SDK_INT >= 21) {
+            statusBar.setElevation(dp(8));
+        }
+        status = text("", 14, Color.WHITE, false);
+        status.setLineSpacing(dp(2), 1f);
+        statusBar.addView(status, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        TextView dismiss = text("OK", 14, 0xFF90CAF9, true);
+        dismiss.setPadding(dp(14), dp(6), dp(10), dp(6));
+        statusBar.addView(dismiss);
+        statusBar.setOnClickListener(v -> statusBar.setVisibility(View.GONE));
+        statusBar.setVisibility(View.GONE);
+
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM);
+        params.setMargins(dp(16), 0, dp(16), dp(16));
+        statusBar.setLayoutParams(params);
+        return statusBar;
+    }
+
+    /** A titled group: a small heading on the background and an empty rounded card under it. */
+    private LinearLayout section(LinearLayout root, String title) {
+        LinearLayout.LayoutParams headingParams = block(22);
+        headingParams.bottomMargin = dp(8);
+        root.addView(overline(title), headingParams);
+        LinearLayout card = groupCard();
+        root.addView(card, block(0));
+        return card;
+    }
+
+    private Switch switchRow(LinearLayout card, String title, String description,
+                             CompoundButton.OnCheckedChangeListener listener) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, dp(10), 0, dp(10));
+        row.setPadding(dp(16), dp(13), dp(14), dp(13));
+        row.setBackground(rowRipple());
 
         LinearLayout labels = new LinearLayout(this);
         labels.setOrientation(LinearLayout.VERTICAL);
-        labels.addView(text(title, 16, COLOR_TEXT, true));
+        labels.addView(medium(title, 16, COLOR_TEXT));
         TextView desc = text(description, 13, COLOR_MUTED, false);
-        desc.setPadding(0, dp(2), 0, 0);
+        desc.setLineSpacing(dp(2), 1f);
+        desc.setPadding(0, dp(3), 0, 0);
         labels.addView(desc);
         lastDescription = desc;
         row.addView(labels, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        Switch toggle = new Switch(this);
+        final Switch toggle = new Switch(this);
         toggle.setOnCheckedChangeListener(listener);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+        LinearLayout.LayoutParams toggleParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.leftMargin = dp(12);
-        row.addView(toggle, lp);
+        toggleParams.leftMargin = dp(12);
+        row.addView(toggle, toggleParams);
 
-        parent.addView(row);
+        // The whole row is a big touch target, not just the small switch.
+        row.setOnClickListener(v -> {
+            if (toggle.isEnabled()) {
+                toggle.toggle();
+            }
+        });
+        addRow(card, row);
         return toggle;
     }
 
-    private LinearLayout card() {
+    /** A tappable row that opens something. Returns its status chip, or null when it has none. */
+    private TextView navRow(LinearLayout card, String title, String description, boolean withChip,
+                            View.OnClickListener listener) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setMinimumHeight(dp(56));
+        row.setPadding(dp(16), dp(12), dp(12), dp(12));
+        row.setBackground(rowRipple());
+        row.setClickable(true);
+        row.setOnClickListener(listener);
+
+        LinearLayout labels = new LinearLayout(this);
+        labels.setOrientation(LinearLayout.VERTICAL);
+        labels.addView(medium(title, 16, COLOR_TEXT));
+        TextView desc = text(description, 13, COLOR_MUTED, false);
+        desc.setLineSpacing(dp(2), 1f);
+        desc.setPadding(0, dp(3), 0, 0);
+        labels.addView(desc);
+        row.addView(labels, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView chip = null;
+        if (withChip) {
+            chip = text("", 12, COLOR_MUTED, true);
+            chip.setPadding(dp(10), dp(4), dp(10), dp(4));
+            LinearLayout.LayoutParams chipParams = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            chipParams.leftMargin = dp(10);
+            row.addView(chip, chipParams);
+        }
+        TextView chevron = text("›", 26, COLOR_MUTED, false);
+        chevron.setPadding(dp(8), 0, dp(4), 0);
+        row.addView(chevron);
+
+        addRow(card, row);
+        return chip;
+    }
+
+    /** Adds a row to a card, with a thin divider above it unless it is the first one. */
+    private void addRow(LinearLayout card, View row) {
+        if (card.getChildCount() > 0) {
+            card.addView(divider());
+        }
+        card.addView(row);
+    }
+
+    private LinearLayout groupCard() {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(16), dp(14), dp(16), dp(14));
         card.setBackground(rounded(COLOR_CARD, 16, COLOR_BORDER, 1));
+        if (Build.VERSION.SDK_INT >= 21) {
+            card.setClipToOutline(true); // keeps row highlights inside the rounded corners
+        }
         return card;
     }
 
-    private LinearLayout.LayoutParams cardParams() {
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+    private LinearLayout.LayoutParams block(int topDp) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.bottomMargin = dp(12);
-        return lp;
+        params.topMargin = dp(topDp);
+        return params;
     }
 
-    private TextView sectionTitle(String label) {
-        TextView t = text(label, 13, COLOR_ACCENT, true);
+    private TextView overline(String label) {
+        TextView t = text(label, 12, COLOR_MUTED, true);
         t.setAllCaps(true);
-        t.setLetterSpacing(0.06f);
-        t.setPadding(0, 0, 0, dp(6));
+        t.setLetterSpacing(0.08f);
+        t.setPadding(dp(4), 0, 0, 0);
         return t;
     }
 
     private View divider() {
         View v = new View(this);
         v.setBackgroundColor(COLOR_BORDER);
-        v.setLayoutParams(new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(1)));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(1));
+        params.leftMargin = dp(16);
+        v.setLayoutParams(params);
         return v;
     }
 
@@ -368,33 +590,28 @@ public class RunnerActivity extends Activity {
         return t;
     }
 
-    private TextView actionRow(String label, View.OnClickListener listener) {
-        TextView row = text(label, 15, COLOR_ACCENT, false);
-        row.setPadding(0, dp(12), 0, dp(12));
-        row.setClickable(true);
-        row.setOnClickListener(listener);
-        TypedValue tv = new TypedValue();
-        if (getTheme().resolveAttribute(android.R.attr.selectableItemBackground, tv, true)) {
-            row.setBackgroundResource(tv.resourceId);
-        }
-        return row;
+    /** Slightly bolder than normal text, for row titles. */
+    private TextView medium(String value, int sp, int color) {
+        TextView t = text(value, sp, color, false);
+        t.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        return t;
     }
 
     private TextView filledButton(String label, View.OnClickListener listener) {
         TextView b = text(label, 14, Color.WHITE, true);
         b.setGravity(Gravity.CENTER);
-        b.setPadding(dp(14), dp(8), dp(14), dp(8));
+        b.setPadding(dp(16), dp(9), dp(16), dp(9));
         b.setBackground(rounded(COLOR_ACCENT, 12, COLOR_ACCENT, 0));
         b.setClickable(true);
         b.setOnClickListener(listener);
         return b;
     }
 
-    private TextView outlineButton(String label, int color, View.OnClickListener listener) {
-        TextView b = text(label, 14, color, true);
+    private TextView tonalButton(String label, View.OnClickListener listener) {
+        TextView b = text(label, 13, COLOR_ACCENT, true);
         b.setGravity(Gravity.CENTER);
         b.setPadding(dp(14), dp(8), dp(14), dp(8));
-        b.setBackground(rounded(COLOR_CARD, 12, color, 1));
+        b.setBackground(rounded(COLOR_ACCENT_SOFT, 12, COLOR_ACCENT_SOFT, 0));
         b.setClickable(true);
         b.setOnClickListener(listener);
         return b;
@@ -410,16 +627,68 @@ public class RunnerActivity extends Activity {
         return d;
     }
 
+    /** Touch feedback for a row that fills its card edge to edge. */
+    private Drawable rowRipple() {
+        if (Build.VERSION.SDK_INT >= 21) {
+            return new RippleDrawable(ColorStateList.valueOf(0x1F1565C0), null,
+                    new ColorDrawable(Color.WHITE));
+        }
+        return new ColorDrawable(Color.TRANSPARENT);
+    }
+
+    /** Round touch feedback for an icon-only button. */
+    private Drawable circleRipple() {
+        if (Build.VERSION.SDK_INT >= 21) {
+            GradientDrawable mask = new GradientDrawable();
+            mask.setShape(GradientDrawable.OVAL);
+            mask.setColor(Color.WHITE);
+            return new RippleDrawable(ColorStateList.valueOf(0x22000000), null, mask);
+        }
+        return new ColorDrawable(Color.TRANSPARENT);
+    }
+
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
+    /** Shows a message at the bottom of the screen. Messages ending in "..." stay until replaced. */
+    private void showStatus(String message) {
+        status.setText(message);
+        statusBar.setVisibility(View.VISIBLE);
+        ui.removeCallbacks(hideStatus);
+        if (!message.endsWith("...")) {
+            ui.postDelayed(hideStatus, STATUS_VISIBLE_MS);
+        }
+    }
+
     private void setStatus(String text) {
-        ui.post(() -> status.setText(text));
+        ui.post(() -> showStatus(text));
     }
 
     private void toast(String text) {
         ui.post(() -> Toast.makeText(this, text, Toast.LENGTH_LONG).show());
+    }
+
+    /** The small "Keep-alive on/off" badge in the header. */
+    private void updatePill(boolean on) {
+        keepPill.setText(on ? "Keep-alive on" : "Keep-alive off");
+        keepPill.setTextColor(on ? COLOR_SUCCESS : COLOR_MUTED);
+        keepPill.setPadding(dp(10), dp(5), dp(12), dp(5));
+        keepPill.setBackground(rounded(on ? COLOR_SUCCESS_SOFT : COLOR_NEUTRAL_SOFT, 14, 0, 0));
+        GradientDrawable dot = new GradientDrawable();
+        dot.setShape(GradientDrawable.OVAL);
+        dot.setColor(on ? COLOR_SUCCESS : 0xFF9AA3AF);
+        dot.setSize(dp(8), dp(8));
+        keepPill.setCompoundDrawablesWithIntrinsicBounds(dot, null, null, null);
+    }
+
+    private void setChip(TextView chip, String label, boolean good) {
+        if (chip == null) {
+            return;
+        }
+        chip.setText(label);
+        chip.setTextColor(good ? COLOR_SUCCESS : COLOR_WARN);
+        chip.setBackground(rounded(good ? COLOR_SUCCESS_SOFT : COLOR_WARN_SOFT, 12, 0, 0));
     }
 
     // ---------------------------------------------------------------- Switch state
@@ -427,6 +696,7 @@ public class RunnerActivity extends Activity {
     private void syncSwitches() {
         syncing = true;
         keepSwitch.setChecked(KeepAliveService.isEnabled(this));
+        updatePill(KeepAliveService.isEnabled(this));
         stayActiveSwitch.setChecked(KeepAliveService.isStayActiveEnabled(this));
         muteSwitch.setChecked(KeepAliveService.isMuteGuestEnabled(this));
         openWithSwitch.setChecked(isOpenWithEnabled());
@@ -444,14 +714,27 @@ public class RunnerActivity extends Activity {
         floatSwitch.setChecked(floatWanted && canDraw);
         floatDescription.setText(floatWanted && !canDraw
                 ? "Needs \"Display over other apps\". Turn this on and allow it."
-                : "A button over a running app. Tap it to keep the app running and go home.");
+                : FLOAT_DESCRIPTION);
         boolean silentOn = KeepAliveService.isSilentAudioEnabled(this);
         silentSwitch.setChecked(silentOn);
         silentDescription.setText(silentOn
                 ? SILENT_DESCRIPTION + "\nStatus: " + KeepAliveService.silentAudioState(this)
                 : SILENT_DESCRIPTION);
         syncing = false;
+        syncPhoneChips();
         warnIfNotificationsOff();
+    }
+
+    /** Shows whether the two settings this app can read are already set the way it needs. */
+    private void syncPhoneChips() {
+        boolean exempt = true;
+        PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+        if (pm != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            exempt = pm.isIgnoringBatteryOptimizations(getPackageName());
+        }
+        setChip(batteryChip, exempt ? "Allowed" : "Not allowed", exempt);
+        boolean notifications = notificationsEnabled();
+        setChip(notificationChip, notifications ? "On" : "Blocked", notifications);
     }
 
     private boolean notificationsEnabled() {
@@ -465,7 +748,7 @@ public class RunnerActivity extends Activity {
 
     private void warnIfNotificationsOff() {
         if (!notificationsEnabled()) {
-            status.setText("Notifications are blocked for this app, so the keep-alive notification and "
+            showStatus("Notifications are blocked for this app, so the keep-alive notification and "
                     + "the media player cannot show. Tap \"Notification settings\" and allow them.");
         }
     }
@@ -503,8 +786,6 @@ public class RunnerActivity extends Activity {
             setStatus("Could not change the menu entry: " + t.getMessage());
         }
     }
-
-    private boolean gmsBusy;
 
     private void onGmsToggled(boolean checked) {
         if (gmsBusy) {
@@ -560,6 +841,16 @@ public class RunnerActivity extends Activity {
             }
         }
         syncSwitches();
+    }
+
+    // ---------------------------------------------------------------- BlackBox manager
+
+    private void openManager() {
+        try {
+            startActivity(new Intent(this, WelcomeActivity.class));
+        } catch (Throwable t) {
+            toast("Could not open the BlackBox manager: " + t.getMessage());
+        }
     }
 
     // ---------------------------------------------------------------- Install
@@ -670,85 +961,143 @@ public class RunnerActivity extends Activity {
                 setStatus("Could not read installed apps: " + t.getMessage());
                 return;
             }
-            ui.post(() -> renderApps(packages));
+            // Names and icons are loaded here, off the main thread.
+            PackageManager pm = getPackageManager();
+            List<AppItem> items = new ArrayList<>();
+            if (packages != null) {
+                for (PackageInfo info : packages) {
+                    String label = info.packageName;
+                    Drawable icon = null;
+                    try {
+                        if (info.applicationInfo != null) {
+                            label = String.valueOf(info.applicationInfo.loadLabel(pm));
+                            icon = info.applicationInfo.loadIcon(pm);
+                        }
+                    } catch (Throwable ignored) {
+                        // fall back to the package name and a letter badge
+                    }
+                    items.add(new AppItem(label, info.packageName, icon));
+                }
+            }
+            ui.post(() -> renderApps(items));
         });
     }
 
-    private void renderApps(List<PackageInfo> packages) {
+    private void renderApps(List<AppItem> items) {
         appList.removeAllViews();
-        if (packages == null || packages.isEmpty()) {
-            TextView empty = text("Nothing here yet. Tap Add APK to install your first app.",
-                    14, COLOR_MUTED, false);
-            empty.setPadding(0, dp(6), 0, dp(6));
-            appList.addView(empty);
+        appsTitle.setText(items.isEmpty() ? "Your apps" : "Your apps · " + items.size());
+        if (items.isEmpty()) {
+            appList.addView(emptyApps());
             return;
         }
-        PackageManager pm = getPackageManager();
         boolean first = true;
-        for (PackageInfo info : packages) {
-            final String pkg = info.packageName;
-            String label = pkg;
-            try {
-                if (info.applicationInfo != null) {
-                    label = String.valueOf(info.applicationInfo.loadLabel(pm));
-                }
-            } catch (Throwable ignored) {
-                // fall back to the package name
-            }
+        for (AppItem item : items) {
             if (!first) {
                 appList.addView(divider());
             }
             first = false;
-            appList.addView(appRow(label, pkg));
+            appList.addView(appRow(item));
         }
     }
 
-    private View appRow(String label, String pkg) {
+    private View emptyApps() {
+        LinearLayout empty = new LinearLayout(this);
+        empty.setOrientation(LinearLayout.VERTICAL);
+        empty.setGravity(Gravity.CENTER_HORIZONTAL);
+        empty.setPadding(dp(24), dp(24), dp(24), dp(24));
+
+        TextView title = text("No apps yet", 17, COLOR_TEXT, true);
+        title.setGravity(Gravity.CENTER);
+        empty.addView(title);
+
+        TextView body = text("Add an APK file here, or open the BlackBox manager above to install "
+                + "apps from your phone.", 13, COLOR_MUTED, false);
+        body.setGravity(Gravity.CENTER);
+        body.setLineSpacing(dp(2), 1f);
+        body.setPadding(0, dp(6), 0, dp(16));
+        empty.addView(body);
+
+        empty.addView(filledButton("Add APK", v -> pickApk()));
+        return empty;
+    }
+
+    private View appRow(AppItem item) {
+        final String pkg = item.pkg;
         LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.VERTICAL);
-        row.setPadding(0, dp(12), 0, dp(12));
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(16), dp(12), dp(6), dp(12));
+        row.setBackground(rowRipple());
+        row.setClickable(true);
+        row.setOnClickListener(v -> launch(pkg));
 
-        LinearLayout top = new LinearLayout(this);
-        top.setOrientation(LinearLayout.HORIZONTAL);
-        top.setGravity(Gravity.CENTER_VERTICAL);
-
-        String initial = label.isEmpty() ? "?" : label.substring(0, 1).toUpperCase();
-        TextView badge = text(initial, 18, Color.WHITE, true);
-        badge.setGravity(Gravity.CENTER);
-        int[] palette = {0xFF1E88E5, 0xFF8E24AA, 0xFF43A047, 0xFFF4511E, 0xFF00897B, 0xFF3949AB};
-        badge.setBackground(rounded(palette[Math.abs(pkg.hashCode()) % palette.length], 20, 0, 0));
-        top.addView(badge, new LinearLayout.LayoutParams(dp(40), dp(40)));
+        row.addView(appIcon(item), new LinearLayout.LayoutParams(dp(44), dp(44)));
 
         LinearLayout names = new LinearLayout(this);
         names.setOrientation(LinearLayout.VERTICAL);
-        names.setPadding(dp(12), 0, 0, 0);
-        TextView name = text(label, 16, COLOR_TEXT, true);
+        names.setPadding(dp(14), 0, dp(8), 0);
+        TextView name = medium(item.label, 16, COLOR_TEXT);
         name.setSingleLine(true);
+        name.setEllipsize(android.text.TextUtils.TruncateAt.END);
         names.addView(name);
         TextView pkgView = text(pkg, 12, COLOR_MUTED, false);
         pkgView.setSingleLine(true);
+        pkgView.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
         names.addView(pkgView);
-        top.addView(names, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        row.addView(top);
+        row.addView(names, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        LinearLayout buttons = new LinearLayout(this);
-        buttons.setOrientation(LinearLayout.HORIZONTAL);
-        buttons.setPadding(0, dp(10), 0, 0);
-        buttons.addView(filledButton("Launch", v -> launch(pkg)));
-        buttons.addView(spacer());
-        buttons.addView(outlineButton("Stop", COLOR_ACCENT, v -> stopApp(pkg)));
-        buttons.addView(spacer());
-        buttons.addView(outlineButton("Remove", COLOR_DANGER, v -> remove(pkg)));
-        row.addView(buttons);
+        row.addView(filledButton("Launch", v -> launch(pkg)));
+
+        DotsView more = new DotsView(this);
+        more.setBackground(circleRipple());
+        more.setClickable(true);
+        more.setContentDescription("More actions for " + item.label);
+        more.setOnClickListener(v -> showAppMenu(v, item));
+        LinearLayout.LayoutParams moreParams = new LinearLayout.LayoutParams(dp(44), dp(44));
+        moreParams.leftMargin = dp(2);
+        row.addView(more, moreParams);
         return row;
     }
 
-    private View spacer() {
-        return new View(this) {
-            {
-                setLayoutParams(new LinearLayout.LayoutParams(dp(8), 1));
+    /** The app's own icon, or a coloured letter when the icon could not be loaded. */
+    private View appIcon(AppItem item) {
+        if (item.icon != null) {
+            ImageView icon = new ImageView(this);
+            icon.setImageDrawable(item.icon);
+            icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            return icon;
+        }
+        String initial = item.label.isEmpty() ? "?" : item.label.substring(0, 1).toUpperCase();
+        TextView badge = text(initial, 18, Color.WHITE, true);
+        badge.setGravity(Gravity.CENTER);
+        int[] palette = {0xFF1E88E5, 0xFF8E24AA, 0xFF43A047, 0xFFF4511E, 0xFF00897B, 0xFF3949AB};
+        badge.setBackground(rounded(palette[Math.abs(item.pkg.hashCode()) % palette.length], 12, 0, 0));
+        return badge;
+    }
+
+    private void showAppMenu(View anchor, AppItem item) {
+        PopupMenu menu = new PopupMenu(this, anchor);
+        menu.getMenu().add(0, 1, 0, "Stop app");
+        menu.getMenu().add(0, 2, 1, "Remove app…");
+        menu.setOnMenuItemClickListener(entry -> {
+            if (entry.getItemId() == 1) {
+                stopApp(item.pkg);
+            } else {
+                confirmRemove(item);
             }
-        };
+            return true;
+        });
+        menu.show();
+    }
+
+    private void confirmRemove(AppItem item) {
+        new AlertDialog.Builder(this)
+                .setTitle("Remove " + item.label + "?")
+                .setMessage("This deletes the app and all of its data from the container, including "
+                        + "saves, logins and downloads. It cannot be undone.")
+                .setPositiveButton("Remove", (dialog, which) -> remove(item.pkg))
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 
     private void launch(String pkg) {
@@ -902,7 +1251,7 @@ public class RunnerActivity extends Activity {
                     if (cm != null) {
                         cm.setPrimaryClip(ClipData.newPlainText("BG App Runner log", text));
                     }
-                    status.setText(count == 0
+                    showStatus(count == 0
                             ? "The log is empty. Launch the app first, then try again."
                             : "Copied " + count + " log lines. Paste them into your chat with Claude.");
                 });
@@ -949,5 +1298,56 @@ public class RunnerActivity extends Activity {
             d.append("(diagnostics failed: ").append(t.getMessage()).append(")");
         }
         return d.toString();
+    }
+
+    // ---------------------------------------------------------------- Small drawn icons
+
+    /** Four rounded squares, one of them faded: "a grid of apps, with room for one more". */
+    private static final class GridIconView extends View {
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+        GridIconView(Context context) {
+            super(context);
+            paint.setColor(Color.WHITE);
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            float side = Math.min(getWidth(), getHeight());
+            float gap = side * 0.14f;
+            float cell = (side - gap) / 2f;
+            float radius = cell * 0.3f;
+            float left = (getWidth() - side) / 2f;
+            float top = (getHeight() - side) / 2f;
+            for (int row = 0; row < 2; row++) {
+                for (int col = 0; col < 2; col++) {
+                    paint.setAlpha(row == 1 && col == 1 ? 110 : 255);
+                    float x = left + col * (cell + gap);
+                    float y = top + row * (cell + gap);
+                    canvas.drawRoundRect(x, y, x + cell, y + cell, radius, radius, paint);
+                }
+            }
+        }
+    }
+
+    /** Three vertical dots: the usual "more actions" icon. */
+    private static final class DotsView extends View {
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+        DotsView(Context context) {
+            super(context);
+            paint.setColor(COLOR_MUTED);
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            float cx = getWidth() / 2f;
+            float cy = getHeight() / 2f;
+            float radius = Math.min(getWidth(), getHeight()) * 0.05f;
+            float step = radius * 4.4f;
+            canvas.drawCircle(cx, cy - step, radius, paint);
+            canvas.drawCircle(cx, cy, radius, paint);
+            canvas.drawCircle(cx, cy + step, radius, paint);
+        }
     }
 }
