@@ -162,6 +162,12 @@ public class KeepAliveService extends Service {
         acquireWakeLock();
         startGuestLoop();
         applySilentAudio();
+        if (intent != null && intent.getBooleanExtra("temporary_trip", false) && !isEnabled(this)) {
+            // Started by a virtual app that is sending the user to the browser (sign-in).
+            // Stop again after a few minutes unless the user turned keep-alive on meanwhile.
+            handler.removeCallbacks(temporaryStop);
+            handler.postDelayed(temporaryStop, 4 * 60 * 1000L);
+        }
         return START_STICKY;
     }
 
@@ -180,6 +186,19 @@ public class KeepAliveService extends Service {
     // binds to GuestKeepService, which lives inside that same process, with BIND_IMPORTANT.
 
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Runnable temporaryStop = new Runnable() {
+        @Override
+        public void run() {
+            if (isEnabled(KeepAliveService.this)) {
+                return; // the user turned keep-alive on, so it stays
+            }
+            stopGuestLoop();
+            stopSilentAudio();
+            releaseWakeLock();
+            stopForeground(true);
+            stopSelf();
+        }
+    };
     private final Map<Integer, ServiceConnection> guestBindings = new HashMap<>();
     private final Runnable guestLoop = new Runnable() {
         @Override

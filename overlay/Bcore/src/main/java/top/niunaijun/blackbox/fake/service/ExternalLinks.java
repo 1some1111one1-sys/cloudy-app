@@ -1,5 +1,7 @@
 package top.niunaijun.blackbox.fake.service;
 
+import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
@@ -21,6 +23,35 @@ public final class ExternalLinks {
     private static long sBrowsersAt;
 
     private ExternalLinks() {
+    }
+
+    /**
+     * Called just before a virtual app sends the user to the phone's browser. The app has to
+     * still be alive when the user comes back (a sign-in is finished by the same running app),
+     * so for the trip it keeps the app's process protected: a short-lived keep-alive service
+     * runs, and the app is not told its screen went away.
+     */
+    public static void protectForTrip() {
+        try {
+            Context context = top.niunaijun.blackbox.BlackBoxCore.getContext();
+            if (context == null) {
+                return;
+            }
+            try (java.io.FileOutputStream out = new java.io.FileOutputStream(
+                    new java.io.File(context.getFilesDir(), "stay_active.flag"), false)) {
+                out.write("H".getBytes("UTF-8"));
+            }
+            Intent service = new Intent().setComponent(new ComponentName(context.getPackageName(),
+                    "top.niunaijun.blackboxa.runner.KeepAliveService"));
+            service.putExtra("temporary_trip", true);
+            if (android.os.Build.VERSION.SDK_INT >= 26) {
+                context.startForegroundService(service);
+            } else {
+                context.startService(service);
+            }
+        } catch (Throwable ignored) {
+            // the trip still works, the app is just less protected
+        }
     }
 
     /**

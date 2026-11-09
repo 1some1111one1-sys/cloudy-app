@@ -37,6 +37,7 @@ COMPONENTS = """
 
         <activity
             android:name="top.niunaijun.blackboxa.runner.AuthRedirectActivity"
+            android:label="Continue in BG App Runner"
             android:exported="true"
             android:excludeFromRecents="true"
             android:launchMode="singleTask"
@@ -172,6 +173,15 @@ ENGINE_PATCHES = [
 KEEP_PATCH_MARKER = "StayActive.holdIfNeeded"
 KEEP_PATCHES = [
     (
+        # When the app's process is not running yet, the engine starts it and re-queues the launch
+        # with a plain "launcher" intent, which throws away what the caller asked for (a file to
+        # open, a sign-in return). Keep the original intent instead.
+        "fake/service/HCallbackProxy.java",
+        "ProxyActivityRecord.saveStub(intent, launchIntentForPackage, stubRecord.mActivityInfo,",
+        "ProxyActivityRecord.saveStub(intent, stubRecord.mTarget != null ? stubRecord.mTarget : launchIntentForPackage, stubRecord.mActivityInfo,",
+        1,
+    ),
+    (
         "fake/service/HCallbackProxy.java",
         """                if (msg.what == BRActivityThreadH.get().CREATE_SERVICE()) {
                     return handleCreateService(msg.obj);""",
@@ -203,6 +213,7 @@ KEEP_PATCHES = [
 
             // Web links go to the phone's own browser, not to a virtual app's https filter.
             if (top.niunaijun.blackbox.fake.service.ExternalLinks.isWebLink(intent)) {
+                top.niunaijun.blackbox.fake.service.ExternalLinks.protectForTrip();
                 return method.invoke(who, args);
             }
 

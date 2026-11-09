@@ -80,6 +80,7 @@ public class OpenWithActivity extends Activity {
     private void findApps() {
         try {
             Uri data = original.getData();
+            Log.d(TAG, "asked to open " + data + " type=" + original.getType());
             type = original.getType();
             if (type == null) {
                 try {
