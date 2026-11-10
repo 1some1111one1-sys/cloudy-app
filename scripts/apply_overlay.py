@@ -173,6 +173,42 @@ ENGINE_PATCHES = [
 KEEP_PATCH_MARKER = "StayActive.holdIfNeeded"
 KEEP_PATCHES = [
     (
+        # Android 13 and newer: the engine's new-intent delivery only knows Android 12 and older
+        # entry points, so a running virtual app never received the file or sign-in link.
+        "app/BActivityThread.java",
+        """            } else if (BRActivityThreadQ.get(mainThread)._check_handleNewIntent(null, null) != null) {
+                BRActivityThreadQ.get(mainThread).handleNewIntent(token, Collections.singletonList(newIntent));
+            }""",
+        """            } else if (BRActivityThreadQ.get(mainThread)._check_handleNewIntent(null, null) != null) {
+                BRActivityThreadQ.get(mainThread).handleNewIntent(token, Collections.singletonList(newIntent));
+            } else {
+                top.niunaijun.blackbox.fake.service.NewIntentCompat.deliver(mainThread, token, newIntent);
+            }""",
+        1,
+    ),
+    (
+        # Leave a trace in the debug log of what is delivered to a running virtual app.
+        "core/system/am/ActivityStack.java",
+        """            activityRecord.processRecord.bActivityThread.handleNewIntent(activityRecord.token, intent);""",
+        """            Log.d(TAG, "OpenWith: new intent for running " + activityRecord.component + " ("
+                    + top.niunaijun.blackbox.fake.service.NewIntentCompat.describe(intent) + ")");
+            activityRecord.processRecord.bActivityThread.handleNewIntent(activityRecord.token, intent);""",
+        1,
+    ),
+    (
+        # ... and of what a freshly started virtual app is launched with.
+        "fake/service/HCallbackProxy.java",
+        """        ActivityInfo activityInfo = stubRecord.mActivityInfo;
+        if (activityInfo != null) {
+            if (BActivityThread.getAppConfig() == null) {""",
+        """        ActivityInfo activityInfo = stubRecord.mActivityInfo;
+        if (activityInfo != null) {
+            Slog.d(TAG, "OpenWith: launching " + activityInfo.name + " ("
+                    + top.niunaijun.blackbox.fake.service.NewIntentCompat.describe(stubRecord.mTarget) + ")");
+            if (BActivityThread.getAppConfig() == null) {""",
+        1,
+    ),
+    (
         # The engine ships with a built-in "send logs" feature that uploads the whole log of this
         # app (and crash reports, automatically) to a server run by the engine's author. Nobody
         # asked for that and logs can hold sign-in links, so it is switched off: with no chat id
@@ -300,13 +336,14 @@ KEEP_PATCHES = [
                 }
 
                 // BG App Runner's own provider for files handed to container apps ("Open with").
+                // The app gets the real provider. The engine's wrapper (ContentProviderDelegate)
+                // replaces every text argument of every call with the host's package name, which
+                // also overwrites the read/write mode ("r"), so every file open failed.
                 if (((String) auth).equals(BlackBoxCore.getHostPkg() + ".openwith")) {
                     if (args.length > 1 && args[1] instanceof String) {
                         args[1] = BlackBoxCore.getHostPkg();
                     }
-                    content = method.invoke(who, args);
-                    ContentProviderDelegate.update(content, (String) auth);
-                    return content;
+                    return method.invoke(who, args);
                 }
 
                 if (BuildCompat.isQ()) {

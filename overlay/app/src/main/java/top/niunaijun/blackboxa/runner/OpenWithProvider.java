@@ -7,6 +7,7 @@ import android.database.MatrixCursor;
 import android.net.Uri;
 import android.os.ParcelFileDescriptor;
 import android.provider.OpenableColumns;
+import android.util.Log;
 import android.webkit.MimeTypeMap;
 
 import java.io.File;
@@ -20,6 +21,7 @@ import java.util.Locale;
  * Addresses look like content://&lt;package&gt;.openwith/&lt;id&gt;/&lt;file name&gt;.
  */
 public class OpenWithProvider extends ContentProvider {
+    private static final String TAG = "OpenWith";
 
     static File root(android.content.Context context) {
         return new File(context.getCacheDir(), "open_with");
@@ -52,6 +54,7 @@ public class OpenWithProvider extends ContentProvider {
                         String sortOrder) {
         try {
             File file = resolve(uri);
+            Log.d(TAG, "provider: query for " + file.getName());
             String[] columns = projection != null ? projection
                     : new String[]{OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE};
             MatrixCursor cursor = new MatrixCursor(columns);
@@ -66,6 +69,7 @@ public class OpenWithProvider extends ContentProvider {
             cursor.addRow(row);
             return cursor;
         } catch (FileNotFoundException e) {
+            Log.w(TAG, "provider: query for a file that is not there: " + uri.getLastPathSegment());
             return null;
         }
     }
@@ -86,7 +90,17 @@ public class OpenWithProvider extends ContentProvider {
 
     @Override
     public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
-        return ParcelFileDescriptor.open(resolve(uri), ParcelFileDescriptor.parseMode(mode));
+        int bits;
+        try {
+            bits = ParcelFileDescriptor.parseMode(mode == null ? "r" : mode);
+        } catch (IllegalArgumentException e) {
+            // An app asked for a mode Android does not know: it only wants to look at the file.
+            Log.w(TAG, "provider: unknown mode \"" + mode + "\", opening read-only");
+            bits = ParcelFileDescriptor.MODE_READ_ONLY;
+        }
+        File file = resolve(uri);
+        Log.d(TAG, "provider: opening " + file.getName() + " mode=" + mode);
+        return ParcelFileDescriptor.open(file, bits);
     }
 
     @Override

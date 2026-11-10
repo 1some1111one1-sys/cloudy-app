@@ -2,6 +2,7 @@ package top.niunaijun.blackboxa.runner;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.ClipData;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
@@ -241,7 +242,10 @@ public class OpenWithActivity extends Activity {
                 intent.setComponent(target);
                 // The engine's launch screen needs the package name set, or it closes without opening.
                 intent.setPackage(target.getPackageName());
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                // Apps look for the file in the intent's data, or in its clip, depending on how
+                // they were written. Offer it in both places, like a file manager does.
+                intent.setClipData(ClipData.newRawUri(copy.getLastPathSegment(), copy));
                 intent.putExtra("bg_runner_from_host", true);
                 Log.d(TAG, "opening " + copy + " in " + intent.getComponent().flattenToShortString());
                 ui.post(() -> {
