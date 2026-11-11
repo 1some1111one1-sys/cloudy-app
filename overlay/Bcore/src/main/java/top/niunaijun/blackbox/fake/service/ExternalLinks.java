@@ -49,6 +49,8 @@ public final class ExternalLinks {
             } else {
                 context.startService(service);
             }
+            android.util.Log.d("ExternalLinks", "OpenWith: the app " + BActivityThread.getAppPackageName()
+                    + " sends the user to the browser, so it is kept alive for the trip");
         } catch (Throwable ignored) {
             // the trip still works, the app is just less protected
         }

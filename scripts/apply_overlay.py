@@ -367,6 +367,125 @@ KEEP_PATCHES = [
     @ProxyMethod("requestAudioFocus")""",
         1,
     ),
+    (
+        # Sign-in return: the screen that opened the browser is still waiting for the answer.
+        # Look for it first, whatever its launch mode or task says, and hand the answer to it.
+        "core/system/am/ActivityStack.java",
+        """        Log.d(TAG, "startActivityLocked : " + resolveInfo.activityInfo);
+        ActivityInfo activityInfo = resolveInfo.activityInfo;
+""",
+        """        Log.d(TAG, "startActivityLocked : " + resolveInfo.activityInfo);
+        ActivityInfo activityInfo = resolveInfo.activityInfo;
+        if (intent.getBooleanExtra("bg_runner_auth_return", false)
+                && deliverToWaitingActivity(userId, activityInfo, intent)) {
+            return 0;
+        }
+""",
+        1,
+    ),
+    (
+        "core/system/am/ActivityStack.java",
+        """    private void deliverNewIntentLocked(ActivityRecord activityRecord, Intent intent) {
+""",
+        """    /**
+     * The browser sent the user back after signing in. The screen that opened the browser is still
+     * waiting for the answer, so the answer goes to that running screen, whatever its launch mode
+     * says, and only then is its task brought back (the order Android uses). Returns false when no
+     * such screen is running, so the normal start-up path takes over.
+     */
+    private boolean deliverToWaitingActivity(int userId, ActivityInfo activityInfo, Intent intent) {
+        try {
+            ComponentName name = ComponentUtils.toComponentName(activityInfo);
+            ActivityRecord waiting = null;
+            synchronized (mTasks) {
+                for (TaskRecord task : mTasks.values()) {
+                    if (task.userId != userId) {
+                        continue;
+                    }
+                    for (ActivityRecord activity : task.activities) {
+                        if (!activity.finished && activity.token != null && name.equals(activity.component)
+                                && activity.processRecord != null
+                                && activity.processRecord.bActivityThread != null
+                                && activity.processRecord.bActivityThread.asBinder().isBinderAlive()) {
+                            waiting = activity;
+                        }
+                    }
+                }
+            }
+            if (waiting == null) {
+                Log.d(TAG, "OpenWith: no running " + name.flattenToShortString()
+                        + " is waiting for the sign-in result, starting it instead");
+                return false;
+            }
+            Intent answer = new Intent(intent);
+            answer.removeExtra("bg_runner_from_host");
+            answer.removeExtra("bg_runner_auth_return");
+            // the browser's own intent names no app and no screen
+            answer.setComponent(null);
+            answer.setPackage(null);
+            Log.d(TAG, "OpenWith: the sign-in result goes to the running " + name.flattenToShortString());
+            deliverNewIntentLocked(waiting, answer);
+            try {
+                if (waiting.task != null) {
+                    mAms.moveTaskToFront(waiting.task.id, 0);
+                }
+            } catch (Throwable t) {
+                // the answer is already delivered, so it must not be started a second time
+                Log.w(TAG, "OpenWith: could not bring the app to the front", t);
+            }
+            return true;
+        } catch (Throwable t) {
+            Log.w(TAG, "OpenWith: could not hand the sign-in result to the running screen", t);
+            return false;
+        }
+    }
+
+    private void deliverNewIntentLocked(ActivityRecord activityRecord, Intent intent) {
+""",
+        1,
+    ),
+    (
+        # Bring the task to the front only AFTER the app has been given its new intent, as Android
+        # does. The engine did it first, so a screen waiting for a browser sign-in came back
+        # without an answer, which it treats as "cancelled".
+        "core/system/am/ActivityStack.java",
+        """        mAms.moveTaskToFront(taskRecord.id, 0);
+""",
+        """        final int bgFrontTaskId = taskRecord.id; // shown after the new intent is delivered, see below
+""",
+        1,
+    ),
+    (
+        "core/system/am/ActivityStack.java",
+        """        if (startTaskToFront)
+            return 0;
+""",
+        """        if (startTaskToFront) {
+            mAms.moveTaskToFront(bgFrontTaskId, 0);
+            return 0;
+        }
+""",
+        1,
+    ),
+    (
+        "core/system/am/ActivityStack.java",
+        """            deliverNewIntentLocked(newIntentRecord, intent);
+            return 0;
+        } else if (ignore) {
+            return 0;
+        }
+""",
+        """            deliverNewIntentLocked(newIntentRecord, intent);
+            mAms.moveTaskToFront(newIntentRecord.task != null ? newIntentRecord.task.id : bgFrontTaskId, 0);
+            return 0;
+        } else if (ignore) {
+            mAms.moveTaskToFront(bgFrontTaskId, 0);
+            return 0;
+        }
+        mAms.moveTaskToFront(bgFrontTaskId, 0);
+""",
+        1,
+    ),
 ]
 
 

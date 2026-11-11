@@ -25,7 +25,10 @@ public class AuthRedirectActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        forward(getIntent());
+        if (savedInstanceState == null) {
+            // (a re-created screen must not hand the same answer over a second time)
+            forward(getIntent());
+        }
         new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(this::finish, 1500);
     }
 
@@ -57,8 +60,12 @@ public class AuthRedirectActivity extends Activity {
             intent.setPackage(activity.packageName);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             intent.putExtra("bg_runner_from_host", true);
+            // The screen that opened the browser is still waiting for this answer: the engine
+            // hands it over to that running screen instead of starting a new one.
+            intent.putExtra("bg_runner_auth_return", true);
             Log.d(TAG, "forwarding " + original.getData().getScheme() + " to " + activity.packageName
-                    + "/" + activity.name);
+                    + "/" + activity.name + " (launchMode=" + activity.launchMode
+                    + ", taskAffinity=" + activity.taskAffinity + ")");
             BlackBoxCore.get().startActivity(intent, USER_ID);
         } catch (Throwable t) {
             Log.w(TAG, "could not forward the sign-in link", t);
