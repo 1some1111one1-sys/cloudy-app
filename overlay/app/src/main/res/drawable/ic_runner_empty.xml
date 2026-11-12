@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Empty-state picture: a soft glass disc with four app squares, one still to be added. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+        android:width="160dp"
+        android:height="160dp"
+        android:viewportWidth="160"
+        android:viewportHeight="160">
+    <path
+            android:fillColor="#147CE4FF"
+            android:pathData="M80,80m-68,0a68,68 0,1 1,136 0a68,68 0,1 1,-136 0" />
+    <path
+            android:pathData="M80,80m-68,0a68,68 0,1 1,136 0a68,68 0,1 1,-136 0"
+            android:strokeWidth="1.5"
+            android:strokeColor="#667CE4FF" />
+    <path
+            android:fillColor="#E6EAFBFF"
+            android:pathData="M60,54h12a6,6 0 0 1 6,6v12a6,6 0 0 1 -6,6h-12a6,6 0 0 1 -6,-6v-12a6,6 0 0 1 6,-6z" />
+    <path
+            android:fillColor="#E6EAFBFF"
+            android:pathData="M88,54h12a6,6 0 0 1 6,6v12a6,6 0 0 1 -6,6h-12a6,6 0 0 1 -6,-6v-12a6,6 0 0 1 6,-6z" />
+    <path
+            android:fillColor="#E6EAFBFF"
+            android:pathData="M60,82h12a6,6 0 0 1 6,6v12a6,6 0 0 1 -6,6h-12a6,6 0 0 1 -6,-6v-12a6,6 0 0 1 6,-6z" />
+    <path
+            android:fillColor="#66EAFBFF"
+            android:pathData="M88,82h12a6,6 0 0 1 6,6v12a6,6 0 0 1 -6,6h-12a6,6 0 0 1 -6,-6v-12a6,6 0 0 1 6,-6z" />
+</vector>

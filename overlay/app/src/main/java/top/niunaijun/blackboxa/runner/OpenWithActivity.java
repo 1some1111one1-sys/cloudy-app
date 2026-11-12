@@ -1,7 +1,7 @@
 package top.niunaijun.blackboxa.runner;
 
 import android.app.Activity;
-import android.app.AlertDialog;
+import android.app.Dialog;
 import android.content.ClipData;
 import android.content.ComponentName;
 import android.content.Intent;
@@ -9,6 +9,8 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.database.Cursor;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Bundle;
@@ -19,9 +21,11 @@ import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
 import android.widget.BaseAdapter;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -181,7 +185,7 @@ public class OpenWithActivity extends Activity {
                 LinearLayout row = new LinearLayout(OpenWithActivity.this);
                 row.setOrientation(LinearLayout.HORIZONTAL);
                 row.setGravity(Gravity.CENTER_VERTICAL);
-                row.setPadding(dp(20), dp(12), dp(20), dp(12));
+                row.setPadding(dp(22), dp(12), dp(20), dp(12));
                 ImageView icon = new ImageView(OpenWithActivity.this);
                 if (choice.icon != null) {
                     icon.setImageDrawable(choice.icon);
@@ -193,23 +197,81 @@ public class OpenWithActivity extends Activity {
                 TextView name = new TextView(OpenWithActivity.this);
                 name.setText(choice.label);
                 name.setTextSize(16);
+                name.setTextColor(Glass.TEXT);
+                name.setTypeface(Glass.medium());
+                name.setSingleLine(true);
+                name.setEllipsize(android.text.TextUtils.TruncateAt.END);
                 texts.addView(name);
                 if (choice.component == null) {
                     TextView hint = new TextView(OpenWithActivity.this);
                     hint.setText("Not known to support this file. It will be sent anyway.");
                     hint.setTextSize(12);
-                    hint.setTextColor(0xFF777777);
+                    hint.setTextColor(Glass.TEXT3);
+                    hint.setPadding(0, dp(2), 0, 0);
                     texts.addView(hint);
                 }
-                row.addView(texts);
+                row.addView(texts, new LinearLayout.LayoutParams(0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
                 return row;
             }
         };
-        new AlertDialog.Builder(this)
-                .setTitle("Open with (in the container)")
-                .setAdapter(adapter, (dialog, which) -> open(choices.get(which)))
-                .setOnCancelListener(dialog -> finish())
-                .show();
+
+        // A frosted glass sheet over the dimmed screen, with the apps listed inside it.
+        final Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setBackground(GlassPanel.solid(dp(26), dp(1)));
+        if (android.os.Build.VERSION.SDK_INT >= 21) {
+            panel.setClipToOutline(true);
+        }
+
+        TextView tag = new TextView(this);
+        tag.setText("Open with");
+        tag.setTextSize(10);
+        tag.setTextColor(Glass.CYAN);
+        tag.setTypeface(Glass.mono());
+        tag.setAllCaps(true);
+        tag.setLetterSpacing(0.18f);
+        tag.setPadding(dp(24), dp(22), dp(24), 0);
+        panel.addView(tag);
+
+        TextView title = new TextView(this);
+        title.setText("Choose an app in the container");
+        title.setTextSize(20);
+        title.setTextColor(Glass.TEXT);
+        title.setTypeface(Glass.medium());
+        title.setPadding(dp(24), dp(4), dp(24), dp(12));
+        panel.addView(title);
+
+        ListView list = new ListView(this);
+        list.setAdapter(adapter);
+        list.setDivider(new ColorDrawable(0x1AFFFFFF));
+        list.setDividerHeight(Math.max(1, dp(1)));
+        list.setSelector(Glass.rowRipple());
+        list.setVerticalScrollBarEnabled(false);
+        list.setOnItemClickListener((parent, view, position, id) -> {
+            dialog.dismiss();
+            open(choices.get(position));
+        });
+        // Room for six apps at a time; more scroll.
+        panel.addView(list, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                Math.min(choices.size(), 6) * dp(65)));
+        View bottom = new View(this);
+        panel.addView(bottom, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(8)));
+
+        dialog.setContentView(panel);
+        dialog.setCanceledOnTouchOutside(true);
+        dialog.setOnCancelListener(d -> finish());
+        Window window = dialog.getWindow();
+        if (window != null) {
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            int width = Math.min(dp(380), getResources().getDisplayMetrics().widthPixels - dp(40));
+            window.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT);
+            window.setDimAmount(0.62f);
+        }
+        dialog.show();
     }
 
     private int dp(int value) {

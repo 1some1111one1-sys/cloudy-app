@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!-- The top bar of every manager screen: see-through, so the live backdrop shows behind it. -->
+<com.google.android.material.appbar.MaterialToolbar xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:app="http://schemas.android.com/apk/res-auto"
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@android:color/transparent"
+        android:theme="@style/ToolBarColorStyle"
+        app:popupTheme="@style/GlassPopupOverlay"
+        app:subtitleTextAppearance="@style/GlassToolbarSubtitle"
+        app:subtitleTextColor="@color/secondary_text"
+        app:title="@string/app_name"
+        app:titleTextAppearance="@style/GlassToolbarTitle"
+        app:titleTextColor="@color/primary_text">
+
+</com.google.android.material.appbar.MaterialToolbar>

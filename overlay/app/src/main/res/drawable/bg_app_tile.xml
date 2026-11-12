@@ -1,17 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- A frosted glass tile for one app of the manager's grid. -->
 <ripple xmlns:android="http://schemas.android.com/apk/res/android"
         android:color="@color/brand_blue_ripple">
     <item>
-        <shape android:shape="rectangle">
-            <solid android:color="@color/tile_background" />
-            <corners android:radius="14dp" />
-            <stroke android:width="1dp" android:color="@color/tile_border" />
-        </shape>
+        <layer-list>
+            <item>
+                <shape android:shape="rectangle">
+                    <solid android:color="@color/tile_background" />
+                    <corners android:radius="18dp" />
+                </shape>
+            </item>
+            <item>
+                <shape android:shape="rectangle">
+                    <gradient
+                            android:angle="315"
+                            android:endColor="#0AC8DEFF"
+                            android:startColor="#26C8DEFF" />
+                    <corners android:radius="18dp" />
+                    <stroke android:width="1dp" android:color="@color/tile_border" />
+                </shape>
+            </item>
+        </layer-list>
     </item>
     <item android:id="@android:id/mask">
         <shape android:shape="rectangle">
             <solid android:color="#FFFFFF" />
-            <corners android:radius="14dp" />
+            <corners android:radius="18dp" />
         </shape>
     </item>
 </ripple>

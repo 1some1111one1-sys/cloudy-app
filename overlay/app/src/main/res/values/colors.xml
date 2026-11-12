@@ -1,18 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Toolbar and status bar of the BlackBox manager screens -->
-    <color name="primary">#0F172A</color>
-    <color name="primary_dark">#0F172A</color>
-    <!-- Used by Material for the add button, switches and other controls -->
-    <color name="primary_light">#1565C0</color>
-    <color name="accent">#ffffff</color>
-    <color name="primary_text">#111827</color>
-    <color name="secondary_text">#5B6575</color>
+    <!-- Names the engine's layouts and code use, re-coloured for the dark glass look -->
+    <color name="primary">#0B1530</color>
+    <color name="primary_dark">#060A18</color>
+    <color name="primary_light">#7CE4FF</color>
+    <color name="accent">#7CE4FF</color>
+    <color name="primary_text">#F4F7FF</color>
+    <color name="secondary_text">#C6D0E6</color>
     <color name="white">#FFFFFFFF</color>
 
-    <color name="screen_background">#F3F5F9</color>
-    <color name="tile_background">#FFFFFF</color>
-    <color name="tile_border">#E3E7EE</color>
-    <color name="brand_blue">#1565C0</color>
-    <color name="brand_blue_ripple">#1F1565C0</color>
+    <color name="screen_background">#0B1530</color>
+    <color name="tile_background">#47080E22</color>
+    <color name="tile_border">#38FFFFFF</color>
+    <color name="brand_blue">#8DEBFF</color>
+    <color name="brand_blue_ripple">#337CE4FF</color>
+
+    <!-- The glass look -->
+    <color name="glass_bg_top">#060A18</color>
+    <color name="glass_bg_mid">#0B1530</color>
+    <color name="glass_bg_bottom">#08283A</color>
+    <color name="glass_surface">#0E1832</color>
+    <color name="glass_cyan">#7CE4FF</color>
+    <color name="glass_blue">#8FA6FF</color>
+    <color name="glass_ink">#061022</color>
+    <color name="glass_text_tertiary">#B0BCD4</color>
+    <color name="glass_hairline">#1AFFFFFF</color>
 </resources>

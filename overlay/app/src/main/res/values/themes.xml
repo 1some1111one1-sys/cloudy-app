@@ -1,39 +1,88 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
 
-    <style name="Theme.BlackBox" parent="Theme.MaterialComponents.Light.NoActionBar">
+    <!-- The BlackBox manager screens: dark blue glass. The live backdrop is added by BaseActivity. -->
+    <style name="Theme.BlackBox" parent="Theme.MaterialComponents.NoActionBar">
 
         <item name="colorPrimary">@color/primary</item>
         <item name="colorPrimaryVariant">@color/primary_dark</item>
         <item name="colorOnPrimary">@color/white</item>
 
-        <item name="colorSecondary">@color/primary_light</item>
-        <item name="colorSecondaryVariant">@color/primary</item>
-        <item name="colorOnSecondary">@color/white</item>
+        <item name="colorSecondary">@color/glass_cyan</item>
+        <item name="colorSecondaryVariant">@color/glass_blue</item>
+        <item name="colorOnSecondary">@color/glass_ink</item>
 
-        <item name="android:statusBarColor" tools:targetApi="l">?attr/colorPrimaryVariant</item>
-        <item name="android:windowBackground">@color/screen_background</item>
+        <item name="colorSurface">@color/glass_surface</item>
+        <item name="colorOnSurface">@color/primary_text</item>
+        <item name="colorBackgroundFloating">@color/glass_surface</item>
+        <item name="elevationOverlayEnabled">false</item>
 
+        <item name="android:colorBackground">@color/glass_bg_mid</item>
+        <item name="android:windowBackground">@drawable/glass_window_bg</item>
+        <item name="android:statusBarColor" tools:targetApi="l">@color/glass_bg_top</item>
+        <item name="android:navigationBarColor" tools:targetApi="l">@color/glass_bg_bottom</item>
+
+        <item name="android:textColorPrimary">@color/primary_text</item>
+        <item name="android:textColorSecondary">@color/secondary_text</item>
+        <item name="android:textColorHint">@color/glass_text_tertiary</item>
         <item name="actionMenuTextColor">@color/primary_text</item>
+
+        <item name="popupMenuStyle">@style/GlassPopupMenu</item>
+        <item name="actionOverflowMenuStyle">@style/GlassPopupMenuOverflow</item>
+
+        <!-- Dialogs of the manager (the Material Dialogs library reads these) -->
+        <item name="md_background_color">@color/glass_surface</item>
+        <item name="md_corner_radius">24dp</item>
+        <item name="md_color_title">@color/primary_text</item>
+        <item name="md_color_content">@color/secondary_text</item>
+        <item name="md_color_button_text">@color/glass_cyan</item>
 
         <item name="android:forceDarkAllowed" tools:targetApi="q">false</item>
     </style>
 
     <style name="ToolBarColorStyle" parent="ThemeOverlay.AppCompat.ActionBar">
-        <item name="actionMenuTextColor">@color/white</item>
-        <item name="colorControlNormal">@color/white</item>
+        <item name="actionMenuTextColor">@color/primary_text</item>
+        <item name="colorControlNormal">@color/primary_text</item>
 
         <item name="android:forceDarkAllowed" tools:targetApi="q">false</item>
     </style>
 
-    <style name="WelcomeTheme" parent="Theme.AppCompat.Light.NoActionBar">
-        <item name="android:windowBackground">@drawable/splash</item>
+    <style name="GlassPopupOverlay" parent="ThemeOverlay.MaterialComponents.Dark">
+        <item name="colorSurface">@color/glass_surface</item>
+        <item name="colorOnSurface">@color/primary_text</item>
     </style>
 
-    <!-- Main screen (RunnerActivity): light, with the same blue as the BlackBox manager. -->
-    <style name="RunnerTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
-        <item name="android:windowBackground">@color/screen_background</item>
-        <item name="android:colorAccent">@color/brand_blue</item>
-        <item name="android:colorControlActivated">@color/brand_blue</item>
+    <style name="GlassToolbarTitle" parent="TextAppearance.Widget.AppCompat.Toolbar.Title">
+        <item name="android:textSize">19sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+
+    <style name="GlassToolbarSubtitle" parent="TextAppearance.Widget.AppCompat.Toolbar.Subtitle">
+        <item name="android:textSize">12sp</item>
+    </style>
+
+    <style name="GlassPopupMenu" parent="Widget.MaterialComponents.PopupMenu">
+        <item name="android:popupBackground">@drawable/glass_popup_bg</item>
+    </style>
+
+    <style name="GlassPopupMenuOverflow" parent="Widget.MaterialComponents.PopupMenu.Overflow">
+        <item name="android:popupBackground">@drawable/glass_popup_bg</item>
+    </style>
+
+    <!-- The first thing seen while the manager opens: the same dark blue, with the app icon. -->
+    <style name="WelcomeTheme" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@drawable/splash</item>
+        <item name="android:statusBarColor" tools:targetApi="l">@color/glass_bg_top</item>
+        <item name="android:navigationBarColor" tools:targetApi="l">@color/glass_bg_bottom</item>
+    </style>
+
+    <!-- Main screen (RunnerActivity): dark, with bars that let the backdrop run behind them. -->
+    <style name="RunnerTheme" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@drawable/glass_window_bg</item>
+        <item name="android:colorBackground">@color/glass_bg_mid</item>
+        <item name="android:colorAccent">@color/glass_cyan</item>
+        <item name="android:colorControlActivated">@color/glass_cyan</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:forceDarkAllowed" tools:targetApi="q">false</item>
     </style>
 

@@ -31,6 +31,13 @@ manager.
 
 ## Use it
 
+**Look:** calm liquid glass. A deep blue backdrop with soft lights that drift and slowly change
+shade (mostly blue, with violet, teal and a touch of rose), flowing contour lines, faint rings and a
+grid of dots that creeps along, with frosted glass panels on top. The same backdrop is behind the
+BlackBox manager screens. It is drawn with a few cached gradients at about 30 frames per second, and it
+stands still while the screen is off or the app is in the background, when the phone's battery saver
+is on, or when animations are turned off in the phone's developer settings.
+
 The main screen is laid out top to bottom:
 
 - **BlackBox manager** (the big card at the top): the engine's own manager. Install apps from your
@@ -151,6 +158,8 @@ crash. This build switches it off (`apply_overlay.py` blanks the chat id it need
 | Path | What it is |
 | --- | --- |
 | `overlay/app/src/main/java/.../runner/RunnerActivity.java` | Main screen: BlackBox manager card, app list, grouped settings |
+| `overlay/app/src/main/java/.../runner/Glass*.java` | The glass look: live backdrop, frosted panel, switch, colours |
+| `overlay/app/src/main/java/.../view/base/BaseActivity.kt` | Puts the live backdrop behind every manager screen |
 | `overlay/app/src/main/res/` | Colours, theme and layouts that restyle the BlackBox manager screens |
 | `overlay/app/src/main/java/.../runner/KeepAliveService.java` | Foreground service with a partial wake lock |
 | `overlay/Bcore/.../StayActive.java` | Engine-side hook behind "Stay active in background" and the Java side of the mute |
