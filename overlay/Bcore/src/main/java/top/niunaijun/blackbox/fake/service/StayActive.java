@@ -37,6 +37,17 @@ public final class StayActive {
     private static volatile boolean muted;
 
     private static boolean nativeReady;
+    private static boolean nativeSkipLogged;
+
+    private static boolean muteSwitchOn() {
+        try {
+            Context context = BlackBoxCore.getContext();
+            return context == null || context.getSharedPreferences("bg_runner_prefs",
+                    Context.MODE_PRIVATE).getBoolean("mute_guest_audio", true);
+        } catch (Throwable t) {
+            return true;
+        }
+    }
 
     private static native int nativeInstall();
 
@@ -48,6 +59,15 @@ public final class StayActive {
     /** Hooks the native audio layer once per process. Safe to call repeatedly. */
     private static synchronized void ensureNative() {
         if (nativeReady) {
+            return;
+        }
+        // The hooks change how the app's own audio code runs, so they are only put in when the
+        // "Mute app sound in background" switch is on. A game that misbehaves can be tried with it off.
+        if (!muteSwitchOn()) {
+            if (!nativeSkipLogged) {
+                nativeSkipLogged = true;
+                Log.d(TAG, "native audio hooks skipped: mute switch is off");
+            }
             return;
         }
         try {

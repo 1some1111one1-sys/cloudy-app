@@ -81,7 +81,9 @@ players are set to volume 0 and restored when you come back, so only this app's 
 left. It covers sound played through Android's normal players (MediaPlayer, ExoPlayer, SoundPool,
 Java AudioTrack) and, through a small native hook on the system's AudioTrack, most game audio
 (OpenSL ES and the older AAudio path). Low-latency AAudio streams that bypass AudioTrack may still
-be heard. The debug log shows `BgMute: native audio hooks installed: N of 5` when it is active.
+be heard. The debug log shows `BgMute: native audio hooks installed: N of 5` when it is active. The native
+part is only put into a game when this switch is on at the moment the game starts, so if a game
+closes by itself, turn the switch off, stop the game (three dots, Stop app) and start it again.
 
 ## Links and Google services
 
