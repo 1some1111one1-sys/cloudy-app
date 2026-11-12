@@ -11,10 +11,7 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RadialGradient;
 import android.graphics.Shader;
-import android.os.Build;
-import android.os.PowerManager;
 import android.os.SystemClock;
-import android.provider.Settings;
 import android.util.AttributeSet;
 import android.view.View;
 
@@ -24,8 +21,8 @@ import android.view.View;
  * that spread out from the brightest light, and a faint grid of dots that creeps along.
  *
  * It is drawn with a handful of cached gradients that are only moved around, so a frame is cheap,
- * and it runs at about 30 frames per second. It stands still when the screen is not showing it,
- * when the phone's battery saver is on, or when the user has turned animations off.
+ * and it runs at about 30 frames per second, without a pause, for as long as the screen shows it
+ * (it ignores the phone's animation and battery saver settings on purpose).
  */
 public class GlassBackground extends View {
     private static final long FRAME_MS = 33;
@@ -67,24 +64,35 @@ public class GlassBackground extends View {
 
     private final Blob[] blobs = {
             // The big azure light at the top right: the brightest thing on screen.
-            new Blob(0.80f, 0.16f, 0.16f, 0.07f, 47f, 61f, 0.0f, 1.3f, 0.62f,
-                    0xFF2F80FF, 0xFF3AB8FF, 0.40f, 53f, 0.0f),
+            new Blob(0.78f, 0.18f, 0.20f, 0.09f, 26f, 34f, 0.0f, 1.3f, 0.62f,
+                    0xFF2F80FF, 0xFF3AB8FF, 0.40f, 30f, 0.0f),
             // A wide deep-blue wash that gives the whole screen its colour.
-            new Blob(0.38f, 0.38f, 0.22f, 0.10f, 71f, 53f, 2.1f, 0.4f, 0.85f,
-                    0xFF1B4FD6, 0xFF2C6BFF, 0.30f, 79f, 1.7f),
+            new Blob(0.40f, 0.40f, 0.26f, 0.12f, 38f, 29f, 2.1f, 0.4f, 0.85f,
+                    0xFF1B4FD6, 0xFF2C6BFF, 0.30f, 44f, 1.7f),
             // Violet on the left, drifting towards magenta.
-            new Blob(0.10f, 0.55f, 0.14f, 0.09f, 59f, 43f, 4.0f, 2.4f, 0.62f,
-                    0xFF6A5CFF, 0xFFA06BFF, 0.34f, 67f, 3.1f),
+            new Blob(0.12f, 0.55f, 0.18f, 0.11f, 33f, 24f, 4.0f, 2.4f, 0.62f,
+                    0xFF6A5CFF, 0xFFA06BFF, 0.34f, 36f, 3.1f),
             // Teal at the lower right, drifting towards sky blue.
-            new Blob(0.86f, 0.80f, 0.13f, 0.08f, 43f, 67f, 1.2f, 3.3f, 0.66f,
-                    0xFF1FD0C0, 0xFF3AB8FF, 0.28f, 61f, 4.4f),
+            new Blob(0.86f, 0.80f, 0.16f, 0.10f, 24f, 37f, 1.2f, 3.3f, 0.66f,
+                    0xFF1FD0C0, 0xFF3AB8FF, 0.28f, 34f, 4.4f),
             // Ice blue through the middle.
-            new Blob(0.55f, 0.68f, 0.20f, 0.08f, 91f, 57f, 5.2f, 0.9f, 0.50f,
-                    0xFF3AB8FF, 0xFF5B8CFF, 0.22f, 83f, 5.6f),
+            new Blob(0.55f, 0.68f, 0.24f, 0.10f, 47f, 31f, 5.2f, 0.9f, 0.50f,
+                    0xFF3AB8FF, 0xFF5B8CFF, 0.22f, 46f, 5.6f),
             // Just a hint of rose at the bottom left.
-            new Blob(0.24f, 0.90f, 0.16f, 0.05f, 83f, 49f, 3.4f, 5.0f, 0.45f,
-                    0xFFFF6BB5, 0xFF7A6BFF, 0.16f, 71f, 0.8f),
+            new Blob(0.24f, 0.90f, 0.20f, 0.06f, 42f, 27f, 3.4f, 5.0f, 0.45f,
+                    0xFFFF6BB5, 0xFF7A6BFF, 0.16f, 40f, 0.8f),
     };
+
+    /** Tiny lights that float slowly upwards and twinkle. */
+    private static final int MOTES = 18;
+    private final float[] moteX = new float[MOTES];     // start, as a fraction of the width
+    private final float[] moteY = new float[MOTES];     // start, as a fraction of the height
+    private final float[] moteRise = new float[MOTES];  // dp per second, upwards
+    private final float[] moteSway = new float[MOTES];  // dp of side-to-side sway
+    private final float[] moteSize = new float[MOTES];  // dp
+    private final float[] motePhase = new float[MOTES];
+    private final float[] moteTwinkle = new float[MOTES]; // seconds per twinkle
+    private final Paint motePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     private LinearGradient lineCyan;
     private LinearGradient lineBlue;
@@ -148,6 +156,16 @@ public class GlassBackground extends View {
         linePaint.setStrokeJoin(Paint.Join.ROUND);
         ringPaint.setStyle(Paint.Style.STROKE);
         ringPaint.setStrokeWidth(Math.max(1f, density));
+        java.util.Random random = new java.util.Random(11);
+        for (int i = 0; i < MOTES; i++) {
+            moteX[i] = random.nextFloat();
+            moteY[i] = random.nextFloat();
+            moteRise[i] = 4f + random.nextFloat() * 9f;
+            moteSway[i] = 6f + random.nextFloat() * 16f;
+            moteSize[i] = 0.9f + random.nextFloat() * 1.3f;
+            motePhase[i] = random.nextFloat() * (float) TWO_PI;
+            moteTwinkle[i] = 4f + random.nextFloat() * 6f;
+        }
     }
 
     // ------------------------------------------------------------------ size and shaders
@@ -256,8 +274,11 @@ public class GlassBackground extends View {
                 brightX = x;
                 brightY = y;
             }
+            // Each light also swells and shrinks a little, so the glow always seems to breathe.
+            float breath = (float) (1.0 + 0.09 * Math.sin(TWO_PI * t / (b.py * 0.45) + b.ox));
             canvas.save();
             canvas.translate(x, y);
+            canvas.scale(breath, breath);
             blobPaint.setShader(b.shaderA);
             blobPaint.setAlpha(Math.round(255f * (1f - mix)));
             canvas.drawCircle(0, 0, r, blobPaint);
@@ -270,6 +291,7 @@ public class GlassBackground extends View {
         drawRings(canvas, t, brightX, brightY);
         drawDots(canvas, t, w, h);
         drawContours(canvas, t, w, h);
+        drawMotes(canvas, t, w, h);
 
         if (fadeEdges && edgePaint.getShader() != null) {
             canvas.drawRect(0, 0, w, h, edgePaint);
@@ -282,7 +304,7 @@ public class GlassBackground extends View {
 
     /** Thin rings that spread out from the brightest light and fade as they grow. */
     private void drawRings(Canvas canvas, double t, float cx, float cy) {
-        final float period = 15f;
+        final float period = 11f;
         final float maxRadius = baseSize * 0.62f;
         for (int i = 0; i < 3; i++) {
             float phase = (float) (((t / period) + i / 3.0) % 1.0);
@@ -302,11 +324,30 @@ public class GlassBackground extends View {
         if (dotShader == null) {
             return;
         }
-        float dx = (float) ((t * 2.4 * density) % tilePx);
-        float dy = (float) ((t * 1.5 * density) % tilePx);
+        float dx = (float) ((t * 4.5 * density) % tilePx);
+        float dy = (float) ((t * 2.8 * density) % tilePx);
         matrix.setTranslate(dx, dy);
         dotShader.setLocalMatrix(matrix);
         canvas.drawRect(0, 0, w, h, dotPaint);
+    }
+
+    private static float wrap(float value, float max) {
+        float r = value % max;
+        return r < 0 ? r + max : r;
+    }
+
+    private void drawMotes(Canvas canvas, double t, int w, int h) {
+        final float margin = 12f * density;
+        for (int i = 0; i < MOTES; i++) {
+            float y = wrap(moteY[i] * h - (float) t * moteRise[i] * density, h + 2 * margin) - margin;
+            float x = moteX[i] * w
+                    + (float) Math.sin(t * 0.35 + motePhase[i]) * moteSway[i] * density;
+            float twinkle = (float) (0.5 + 0.5 * Math.sin(TWO_PI * t / moteTwinkle[i] + motePhase[i]));
+            int alpha = Math.round(255f * (0.10f + 0.30f * twinkle));
+            motePaint.setColor((i % 3 == 0) ? 0xFFFFFFFF : Glass.CYAN);
+            motePaint.setAlpha(alpha);
+            canvas.drawCircle(x, y, moteSize[i] * density, motePaint);
+        }
     }
 
     /** A few long, gentle wave lines, like contours on a map that slowly flows. */
@@ -318,8 +359,8 @@ public class GlassBackground extends View {
             float amp = (16f + 5f * i) * density;
             double k1 = TWO_PI / ((300 + 40 * i) * density);
             double k2 = TWO_PI / ((170 + 25 * i) * density);
-            double s1 = 0.060 + 0.007 * i;
-            double s2 = 0.085 - 0.005 * i;
+            double s1 = 0.085 + 0.008 * i;
+            double s2 = 0.110 - 0.006 * i;
             path.rewind();
             boolean first = true;
             for (float x = -step; x <= w + step; x += step) {
@@ -369,8 +410,8 @@ public class GlassBackground extends View {
     }
 
     private void updateRunning() {
-        boolean shouldRun = attached && getWindowVisibility() == VISIBLE && getVisibility() == VISIBLE
-                && motionAllowed();
+        // It moves whenever it can be seen, whatever the phone's animation or battery settings say.
+        boolean shouldRun = attached && getWindowVisibility() == VISIBLE && getVisibility() == VISIBLE;
         if (shouldRun && !running) {
             running = true;
             lastFrame = 0;
@@ -384,29 +425,5 @@ public class GlassBackground extends View {
     private void stop() {
         running = false;
         removeCallbacks(tick);
-    }
-
-    /** Off when the user turned animations off or the phone is saving battery. */
-    private boolean motionAllowed() {
-        try {
-            float scale = Settings.Global.getFloat(getContext().getContentResolver(),
-                    Settings.Global.ANIMATOR_DURATION_SCALE, 1f);
-            if (scale <= 0f) {
-                return false;
-            }
-        } catch (Throwable ignored) {
-            // keep going: moving is the default
-        }
-        try {
-            if (Build.VERSION.SDK_INT >= 21) {
-                PowerManager pm = (PowerManager) getContext().getSystemService(Context.POWER_SERVICE);
-                if (pm != null && pm.isPowerSaveMode()) {
-                    return false;
-                }
-            }
-        } catch (Throwable ignored) {
-            // keep going
-        }
-        return true;
     }
 }

@@ -31,12 +31,12 @@ manager.
 
 ## Use it
 
-**Look:** calm liquid glass. A deep blue backdrop with soft lights that drift and slowly change
-shade (mostly blue, with violet, teal and a touch of rose), flowing contour lines, faint rings and a
-grid of dots that creeps along, with frosted glass panels on top. The same backdrop is behind the
-BlackBox manager screens. It is drawn with a few cached gradients at about 30 frames per second, and it
-stands still while the screen is off or the app is in the background, when the phone's battery saver
-is on, or when animations are turned off in the phone's developer settings.
+**Look:** calm liquid glass. A deep blue backdrop with soft lights that drift, swell and slowly change
+shade (mostly blue, with violet, teal and a touch of rose), flowing contour lines, faint rings, tiny
+floating lights and a grid of dots that creeps along, with frosted glass panels on top. The same
+backdrop is behind the BlackBox manager screens. It moves all the time while the screen shows it, at
+about 30 frames per second from a few cached gradients, whatever the phone's animation or battery
+saver settings say. It only stops while the screen is off or another app is in front.
 
 The main screen is laid out top to bottom:
 
