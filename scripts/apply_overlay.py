@@ -234,6 +234,20 @@ KEEP_PATCHES = [
         1,
     ),
     (
+        # Instagram closed about ten seconds after it started: it asks Android's Credential Manager
+        # for saved logins, Android refuses the call from inside the container with a SecurityException
+        # and Instagram does not handle that. ICredentialManagerProxy answers "no saved logins" instead.
+        "fake/hook/HookManager.java",
+        """                addInjector(new ISensitiveContentProtectionManagerProxy());
+""",
+        """                addInjector(new ISensitiveContentProtectionManagerProxy());
+                if (android.os.Build.VERSION.SDK_INT >= 34) {
+                    addInjector(new top.niunaijun.blackbox.fake.service.ICredentialManagerProxy());
+                }
+""",
+        1,
+    ),
+    (
         # Google sign-in from any space except space 0 died at once. The engine's account service
         # keeps one record per space but never writes the space number into it, so every record
         # said "space 0". Sign-in then looked for Google's sign-in service in space 0, found nothing
