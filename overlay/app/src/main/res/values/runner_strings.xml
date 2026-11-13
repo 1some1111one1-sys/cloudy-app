@@ -5,4 +5,9 @@
     <string name="runner_group_google">Google</string>
     <string name="runner_group_privacy">Privacy and compatibility</string>
     <string name="runner_group_background">Background and network</string>
+    <string name="gms_sign_in">Sign in</string>
+    <string name="gms_sign_in_starting">Opening Google sign-in…</string>
+    <string name="gms_sign_in_done">Signed in as %1$s</string>
+    <string name="gms_sign_in_failed">Google sign-in</string>
+    <string name="gms_open_play_store">Open Play Store</string>
 </resources>

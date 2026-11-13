@@ -127,6 +127,11 @@ keep only the newest app's), and turns a refused connection into a normal "sign-
 answer. The steps after that (Google's own sign-in screens, device registration, tokens) have not
 been seen working yet. The log lines to look for carry the tag `BlackBoxAccounts`.
 
+A **Sign in** button sits next to every space that has Google services turned on (Settings > GMS
+Manager) and in the "Google services" card of the main screen. It sends the same "add a Google
+account" request Android's Settings sends (`GoogleSignIn.java`), opens the sign-in screen Google
+returns inside the container, and opens Play Store once an account was added.
+
 ## If apps still stop
 
 Phone battery managers can be aggressive. Try these first: **Autostart in background** and
@@ -178,6 +183,8 @@ crash. This build switches it off (`apply_overlay.py` blanks the chat id it need
 | `overlay/app/src/main/java/.../runner/Glass*.java` | The glass look: live backdrop, frosted panel, switch, colours |
 | `overlay/app/src/main/java/.../view/base/BaseActivity.kt` | Puts the live backdrop behind every manager screen |
 | `overlay/app/src/main/res/` | Colours, theme and layouts that restyle the BlackBox manager screens |
+| `overlay/Bcore/src/main/java/.../fake/frameworks/GoogleSignIn.java` | Starts "add a Google account" for one space and opens Google's sign-in screen in the container |
+| `overlay/app/src/main/java/.../view/gms/` | GMS Manager list with the Sign in button (copies of the engine's two files, changed) |
 | `overlay/app/src/main/java/.../runner/DebugReport.java` | Pieces of the debug report: process exit reasons, saved crash reports, apps and files inside the container |
 | `overlay/app/src/main/java/.../runner/Tombstone.java` | Reads the native crash record Android keeps for a process (signal, call stack, last log lines) |
 | `overlay/app/src/main/java/.../runner/KeepAliveService.java` | Foreground service with a partial wake lock |

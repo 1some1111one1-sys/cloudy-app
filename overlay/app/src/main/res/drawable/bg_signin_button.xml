@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The small glass "Sign in" pill of the Google services list. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+        android:color="@color/brand_blue_ripple">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#1F7CE4FF" />
+            <corners android:radius="20dp" />
+            <stroke android:width="1dp" android:color="#667CE4FF" />
+        </shape>
+    </item>
+</ripple>

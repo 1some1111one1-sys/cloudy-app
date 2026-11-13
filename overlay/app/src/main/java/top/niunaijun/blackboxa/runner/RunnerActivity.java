@@ -62,6 +62,7 @@ import java.util.regex.Pattern;
 import java.util.zip.ZipFile;
 
 import top.niunaijun.blackbox.BlackBoxCore;
+import top.niunaijun.blackbox.fake.frameworks.GoogleSignIn;
 import top.niunaijun.blackbox.entity.pm.InstallResult;
 import top.niunaijun.blackboxa.view.main.WelcomeActivity;
 
@@ -304,6 +305,10 @@ public class RunnerActivity extends Activity {
                     onGmsToggled(checked);
                 });
         gmsDescription = lastDescription;
+        navRow(google, "Sign in to Google Play",
+                "Opens Google's sign-in screen inside the container so Play Store can use your "
+                        + "account. Turn on Google Play services above first.",
+                false, v -> signInToGoogle());
 
         // Help
         LinearLayout help = section(root, "Help");
@@ -819,6 +824,37 @@ public class RunnerActivity extends Activity {
         } catch (Throwable t) {
             setStatus("Could not change the menu entry: " + t.getMessage());
         }
+    }
+
+    private void signInToGoogle() {
+        if (!BlackBoxCore.get().isSupportGms()) {
+            setStatus("Google Play services are not on this phone, so there is nothing to sign in to.");
+            return;
+        }
+        if (!BlackBoxCore.get().isInstallGms(USER_ID)) {
+            setStatus("Turn on \"Google Play services in the container\" first, then sign in.");
+            return;
+        }
+        setStatus("Opening Google sign-in...");
+        GoogleSignIn.start(USER_ID, new GoogleSignIn.Listener() {
+            @Override
+            public void onScreenOpened() {
+                setStatus("Google's sign-in screen is open. Finish signing in there.");
+            }
+
+            @Override
+            public void onSignedIn(String accountName) {
+                setStatus("Signed in as " + accountName + ". Opening Play Store.");
+                if (BlackBoxCore.get().isInstalled("com.android.vending", USER_ID)) {
+                    BlackBoxCore.get().launchApk("com.android.vending", USER_ID);
+                }
+            }
+
+            @Override
+            public void onFailed(String message) {
+                setStatus(message);
+            }
+        });
     }
 
     private void onGmsToggled(boolean checked) {
