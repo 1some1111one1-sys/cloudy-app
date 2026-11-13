@@ -117,6 +117,16 @@ have them installed. Apps then find Google services as on a normal phone. Featur
 app's original package name and signing key, such as Google sign-in or Play Games for some apps,
 can still refuse to work because the app is not running as itself.
 
+**Signing in to Google** (Play Store, or any app that asks for a Google account): install Play
+services and Play Store into the same space as the app, then tap Sign in. The engine's account
+service never recorded which space an account belongs to, so every account looked like it was in
+space 0 and sign-in from any other space died with `Not allowed to bind to service ...`
+(`GoogleAccountAuthenticatorService`) and closed the app that asked. `apply_overlay.py` now sets the
+space on every lookup, rebuilds the list of sign-in services when an app is installed (it used to
+keep only the newest app's), and turns a refused connection into a normal "sign-in failed"
+answer. The steps after that (Google's own sign-in screens, device registration, tokens) have not
+been seen working yet. The log lines to look for carry the tag `BlackBoxAccounts`.
+
 ## If apps still stop
 
 Phone battery managers can be aggressive. Try these first: **Autostart in background** and
@@ -146,7 +156,12 @@ crash. This build switches it off (`apply_overlay.py` blanks the chat id it need
 - Only one complete `.apk` file works. Split bundles (`.apks`, `.xapk`, `.apkm`) do not, and the base
   APK taken from a Play Store split install installs but shows a blank screen. The app warns you
   when it detects either case.
-- If an app opens to a blank or black screen, tap **Copy debug log**, then paste it to get the real error.
+- If an app opens to a blank or black screen, or closes by itself, tap **Copy debug log**, then paste
+  it to get the real error. The report holds: the settings, how each container process ended (Android's
+  own record: exit reason, signal, and for a native crash the call stack and the last log lines),
+  the crash reports the container saved (the engine hides the error message of an app that dies from
+  an uncaught exception; `BlackBoxCrash` in the log carries it from now on), the apps inside the
+  container with their files (APK, libraries, game data and OBB), and the recent log.
 - Apps that depend on Google Play services, root or integrity checks, banking apps, and some games
   may refuse to run or crash.
 - The engine says it supports Android 5 to 14+. Newer versions may have problems. If the build
@@ -163,6 +178,8 @@ crash. This build switches it off (`apply_overlay.py` blanks the chat id it need
 | `overlay/app/src/main/java/.../runner/Glass*.java` | The glass look: live backdrop, frosted panel, switch, colours |
 | `overlay/app/src/main/java/.../view/base/BaseActivity.kt` | Puts the live backdrop behind every manager screen |
 | `overlay/app/src/main/res/` | Colours, theme and layouts that restyle the BlackBox manager screens |
+| `overlay/app/src/main/java/.../runner/DebugReport.java` | Pieces of the debug report: process exit reasons, saved crash reports, apps and files inside the container |
+| `overlay/app/src/main/java/.../runner/Tombstone.java` | Reads the native crash record Android keeps for a process (signal, call stack, last log lines) |
 | `overlay/app/src/main/java/.../runner/KeepAliveService.java` | Foreground service with a partial wake lock |
 | `overlay/Bcore/.../StayActive.java` | Engine-side hook behind "Stay active in background" and the Java side of the mute |
 | `overlay/Bcore/src/main/cpp/BgMute/BgMute.cpp` | Native AudioTrack hook that mutes game audio in the background |

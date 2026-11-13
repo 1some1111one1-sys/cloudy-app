@@ -219,6 +219,83 @@ KEEP_PATCHES = [
         1,
     ),
     (
+        # The engine replaces Android's crash handler inside every virtual app with one that only
+        # writes a file, so the error that killed an app never reaches the log. Print it as well
+        # (tag BlackBoxCrash), so "Copy debug log" and any logcat capture show what went wrong.
+        "utils/CrashMonitor.java",
+        """    public static void handleCrash(String crashType, Thread thread, Throwable throwable) {
+        try {
+            sTotalCrashes.incrementAndGet();""",
+        """    public static void handleCrash(String crashType, Thread thread, Throwable throwable) {
+        try {
+            android.util.Log.e("BlackBoxCrash", crashType + " in thread "
+                    + (thread != null ? thread.getName() : "?") + ": " + throwable, throwable);
+            sTotalCrashes.incrementAndGet();""",
+        1,
+    ),
+    (
+        # Google sign-in from any space except space 0 died at once. The engine's account service
+        # keeps one record per space but never writes the space number into it, so every record
+        # said "space 0". Sign-in then looked for Google's sign-in service in space 0, found nothing
+        # there (Play Store and Google services live in the space the user chose), fell back to a
+        # plain Android bind that Android refuses, and the exception killed the app that asked.
+        # Records saved by older builds carry the wrong number too, so it is set on every lookup.
+        "core/system/accounts/BAccountManagerService.java",
+        """                mUserAccountsMap.put(userId, bUserAccounts);
+            }
+            return mUserAccountsMap.get(userId);""",
+        """                mUserAccountsMap.put(userId, bUserAccounts);
+            }
+            bUserAccounts.userId = userId;
+            return bUserAccounts;""",
+        1,
+    ),
+    (
+        # Installing any app made the account service forget every other app's sign-in service
+        # (it rebuilt the list from the new app alone), so adding Play Store after Google services
+        # removed Google sign-in until the next restart. Rebuild the whole list instead.
+        "core/system/accounts/BAccountManagerService.java",
+        """    public void onPackageInstalled(String packageName, int userId) {
+        loadAuthenticatorCache(packageName);""",
+        """    public void onPackageInstalled(String packageName, int userId) {
+        loadAuthenticatorCache(null);""",
+        1,
+    ),
+    (
+        # Say in the log which sign-in service is used for which space, and when there is none.
+        "core/system/accounts/BAccountManagerService.java",
+        """            AuthenticatorInfo authenticatorInfo = mAuthenticatorCache.authenticators.get(authenticatorType);
+""",
+        """            AuthenticatorInfo authenticatorInfo = mAuthenticatorCache.authenticators.get(authenticatorType);
+            if (authenticatorInfo == null) {
+                Log.w("BlackBoxAccounts", "no sign-in service is installed for account type " + authenticatorType
+                        + " (space " + mAccounts.userId + ")");
+            } else {
+                Log.i("BlackBoxAccounts", "sign-in service for " + authenticatorType + ": "
+                        + authenticatorInfo.serviceInfo.packageName + "/" + authenticatorInfo.serviceInfo.name
+                        + " in space " + mAccounts.userId);
+            }
+""",
+        1,
+    ),
+    (
+        # If Android still refuses to connect to the sign-in service (for example Google services
+        # are installed in another space), tell the app that sign-in failed instead of letting the
+        # exception travel back and close it.
+        "core/system/accounts/BAccountManagerService.java",
+        """            if (!mContext.bindService(intent, this, flags)) {""",
+        """            boolean bound = false;
+            try {
+                bound = mContext.bindService(intent, this, flags);
+            } catch (SecurityException e) {
+                Log.e("BlackBoxAccounts", "cannot connect to " + componentName.flattenToShortString()
+                        + " for space " + mAccounts.userId
+                        + " (is Google Play services installed in this space?): " + e.getMessage());
+            }
+            if (!bound) {""",
+        1,
+    ),
+    (
         # When the app's process is not running yet, the engine starts it and re-queues the launch
         # with a plain "launcher" intent, which throws away what the caller asked for (a file to
         # open, a sign-in return). Keep the original intent instead.

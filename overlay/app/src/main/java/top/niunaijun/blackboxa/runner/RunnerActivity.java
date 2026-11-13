@@ -48,8 +48,13 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
@@ -1296,28 +1301,75 @@ public class RunnerActivity extends Activity {
 
     // ---------------------------------------------------------------- Debug log
 
-    /** Copies recent warnings and errors from this app (including virtual apps) to the clipboard. */
+    /** Words that make a log line worth keeping even when it is not a warning or an error. */
+    private static final String[] LOG_KEYWORDS = {
+            "BlackBox", "AndroidRuntime", "FATAL", "SplashScreen", "StayActive", "BgMute", "OpenWith",
+            "startActivityLocked", "AuthRedirect", "Xal", "xal", "BrowserLaunch", "CustomTabs", "chromium",
+            "Hook in", "mojang", "Minecraft", "WebView", "CrashMonitor", "SimpleCrashFix", "BProcessManager",
+            "ActivityStack", "App Died", "CatchMeIfYouCan", "appstatelogger", "UnsatisfiedLink", "dlopen",
+            "Fatal signal", "SIGSEGV", "SIGABRT", "tombstone", "libGTASA", "rockstar",
+            // Google sign-in
+            "IAccountManagerProxy", "GoogleSignatureVerifier", "GooglePlayServicesUtil", "GoogleApiManager",
+            "Not allowed to bind", "GLSActivity", "GLSUser", "GoogleAuth"};
+
+    /** Lines that are never collapsed as repeats: they are the story of a crash or of a start-up. */
+    private static final String[] LOG_NEVER_HIDE = {
+            "AndroidRuntime", "BlackBoxCrash", "BlackBoxAccounts", "CrashMonitor", "SimpleCrashFix",
+            "Fatal signal", "DEBUG ", "tombstone", "UnsatisfiedLink", "OpenWith", "startActivityLocked",
+            "BProcessManager", "beforeCreateApplication", "SplashScreen", "StayActive", "BgMute",
+            "ActivityStack", "CatchMeIfYouCan", "appstatelogger"};
+
+    private static boolean containsAny(String line, String[] words) {
+        for (String word : words) {
+            if (line.contains(word)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String clip(String text, int max) {
+        return text.length() <= max ? text : text.substring(0, max) + "...";
+    }
+
+    /**
+     * Copies a report to the clipboard: settings, how the container's processes ended, the crash
+     * reports it saved, the apps inside it and the recent log (warnings, errors and its own events).
+     */
     private void copyDebugLog() {
         setStatus("Collecting log...");
         io.execute(() -> {
             try {
+                final DebugReport.Exits exits = DebugReport.recentExits(this);
+                final Set<Integer> tailPids = new HashSet<>(exits.guestPids);
+                final Map<Integer, ArrayDeque<String>> tails = new HashMap<>();
+                final Map<String, Integer> seenTail = new HashMap<>();
+                final Map<String, Integer> seen = new HashMap<>();
+
                 Process process = Runtime.getRuntime().exec(
-                        new String[]{"logcat", "-d", "-v", "threadtime", "-t", "30000"});
-                Pattern level = Pattern.compile("^\\S+\\s+\\S+\\s+\\d+\\s+\\d+\\s+([VDIWEF])\\s");
+                        new String[]{"logcat", "-d", "-v", "threadtime", "-t", "60000"});
+                Pattern format = Pattern.compile("^\\d\\d-\\d\\d \\d\\d:\\d\\d:\\d\\d\\.\\d+\\s+(\\d+)\\s+\\d+\\s+"
+                        + "([VDIWEF])\\s+(.*?)\\s*:\\s?(.*)$");
                 StringBuilder out = new StringBuilder();
-                final int[] hiddenCount = {0};
+                int hiddenRepeats = 0;
+                int hiddenGoogle = 0;
+                int googleTraces = 0;
                 int lines = 0;
                 try (BufferedReader reader = new BufferedReader(
                         new InputStreamReader(process.getInputStream()))) {
                     String line;
                     boolean skipTrace = false;
                     while ((line = reader.readLine()) != null) {
-                        // Crashes of the copied Google apps repeat endlessly and bury everything else.
+                        // Crashes of the copied Google apps repeat endlessly and bury everything else:
+                        // the first few are kept in full, the rest are hidden.
                         if (line.contains("AndroidRuntime")) {
                             if (line.contains("Process: com.google.android.gms")
                                     || line.contains("Process: com.android.vending")) {
-                                skipTrace = true;
-                                hiddenCount[0]++;
+                                googleTraces++;
+                                skipTrace = googleTraces > 3;
+                                if (skipTrace) {
+                                    hiddenGoogle++;
+                                }
                             } else if (line.contains("FATAL EXCEPTION")) {
                                 skipTrace = false;
                             }
@@ -1327,42 +1379,98 @@ public class RunnerActivity extends Activity {
                         } else {
                             skipTrace = false;
                         }
-                        Matcher m = level.matcher(line);
-                        boolean keep = line.contains("BlackBox") || line.contains("AndroidRuntime")
-                                || line.contains("FATAL") || line.contains("SplashScreen")
-                                || line.contains("StayActive") || line.contains("BgMute")
-                                || line.contains("OpenWith") || line.contains("startActivityLocked")
-                                || line.contains("AuthRedirect") || line.contains("Xal") || line.contains("xal")
-                                || line.contains("BrowserLaunch") || line.contains("CustomTabs")
-                                || line.contains("chromium") || line.contains("Hook in")
-                                || line.contains("mojang") || line.contains("Minecraft") || line.contains("WebView")
-                                || (m.find() && "WEF".contains(m.group(1)));
+                        Matcher m = format.matcher(line);
+                        if (!m.matches()) {
+                            continue;
+                        }
+                        int pid = Integer.parseInt(m.group(1));
+                        char level = m.group(2).charAt(0);
+                        String tag = m.group(3);
+                        String message = m.group(4);
+                        boolean never = containsAny(line, LOG_NEVER_HIDE);
+
+                        // The last lines of the container process that just ended, whatever their level.
+                        if (tailPids.contains(pid)) {
+                            String tailKey = pid + tag + "|" + clip(message, 60);
+                            Integer n = seenTail.get(tailKey);
+                            n = n == null ? 1 : n + 1;
+                            seenTail.put(tailKey, n);
+                            if (n <= 3 || never) {
+                                ArrayDeque<String> tail = tails.get(pid);
+                                if (tail == null) {
+                                    tail = new ArrayDeque<>();
+                                    tails.put(pid, tail);
+                                }
+                                if (tail.size() >= 80) {
+                                    tail.removeFirst();
+                                }
+                                tail.addLast(clip(line, 220));
+                            }
+                        }
+
+                        boolean keep = level == 'W' || level == 'E' || level == 'F'
+                                || containsAny(line, LOG_KEYWORDS);
                         if (!keep) {
                             continue;
                         }
-                        out.append(line).append('\n');
+                        if (!never) {
+                            String key = tag + "|" + clip(message, 80);
+                            Integer n = seen.get(key);
+                            n = n == null ? 1 : n + 1;
+                            seen.put(key, n);
+                            if (n > 4) {
+                                hiddenRepeats++;
+                                continue;
+                            }
+                        }
+                        out.append(clip(line, 400)).append('\n');
                         lines++;
-                        if (out.length() > 90000) {
-                            out.delete(0, out.length() - 70000);
+                        if (out.length() > 60000) {
+                            out.delete(0, out.length() - 45000);
                         }
                     }
                 }
-                if (hiddenCount[0] > 0) {
-                    out.insert(0, "(" + hiddenCount[0] + " Google service crash traces hidden)\n");
+
+                StringBuilder tailText = new StringBuilder();
+                for (int pid : exits.guestPids) {
+                    ArrayDeque<String> tail = tails.get(pid);
+                    if (tail == null || tail.isEmpty()) {
+                        continue;
+                    }
+                    tailText.append("Last log lines of the container process that ended (pid ")
+                            .append(pid).append("):\n");
+                    for (String l : tail) {
+                        tailText.append("  ").append(l).append('\n');
+                    }
+                    tailText.append('\n');
                 }
-                final String text = "BG App Runner log, Android " + Build.VERSION.RELEASE
-                        + ", " + Build.MANUFACTURER + " " + Build.MODEL
-                        + ", 64-bit host: " + BlackBoxCore.is64Bit() + "\n"
-                        + diagnostics() + "\n" + out;
+
+                final StringBuilder text = new StringBuilder();
+                text.append("BG App Runner log, Android ").append(Build.VERSION.RELEASE)
+                        .append(", ").append(Build.MANUFACTURER).append(' ').append(Build.MODEL)
+                        .append(", 64-bit host: ").append(BlackBoxCore.is64Bit()).append('\n')
+                        .append(diagnostics()).append("\n\n")
+                        .append(exits.text).append('\n')
+                        .append(DebugReport.crashReports(this)).append('\n')
+                        .append(DebugReport.guestApps(this)).append('\n')
+                        .append(tailText);
+                text.append("Log lines (warnings, errors and the container's own events; repeats hidden):\n");
+                if (hiddenGoogle > 0) {
+                    text.append("(").append(hiddenGoogle).append(" Google service crash lines hidden)\n");
+                }
+                if (hiddenRepeats > 0) {
+                    text.append("(").append(hiddenRepeats).append(" repeated lines hidden)\n");
+                }
+                text.append(out);
                 final int count = lines;
                 ui.post(() -> {
                     ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
                     if (cm != null) {
-                        cm.setPrimaryClip(ClipData.newPlainText("BG App Runner log", text));
+                        cm.setPrimaryClip(ClipData.newPlainText("BG App Runner log", text.toString()));
                     }
-                    showStatus(count == 0
+                    showStatus(count == 0 && exits.guestPids.isEmpty()
                             ? "The log is empty. Launch the app first, then try again."
-                            : "Copied " + count + " log lines. Paste them into your chat with Claude.");
+                            : "Copied the debug report. Paste it into your chat with Claude.");
                 });
             } catch (Throwable t) {
                 setStatus("Could not read the log: " + t.getMessage());
