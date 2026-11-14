@@ -310,6 +310,150 @@ KEEP_PATCHES = [
         1,
     ),
     (
+        # GTA San Andreas closed right after its loading bar: it writes its first file into its own
+        # folder on "phone storage" (Android/data/<package>/files), the folder did not exist, the
+        # game does not check that and crashed (CColAccel::endCache). On a real phone Android creates
+        # these folders; inside the container nobody did, and File.mkdirs() could not build them
+        # through the path rewrite either. Create the usual folders before the rewrite is switched on.
+        "core/IOCore.java",
+        """                File external = BEnvironment.getExternalUserDir(BlackBoxCore.getUserId());
+""",
+        """                File external = BEnvironment.getExternalUserDir(BlackBoxCore.getUserId());
+                top.niunaijun.blackbox.core.env.ExternalFolders.prepare(external, packageName);
+""",
+        1,
+    ),
+    (
+        # The engine answered Android's "create this folder on phone storage" request (StorageManager
+        # .mkdirs, which getExternalFilesDir() falls back to) with a plain "ok" and created nothing.
+        # Build the folder in the container's copy of the storage instead.
+        "fake/service/IStorageManagerProxy.java",
+        """    @ProxyMethod("mkdirs")
+    public static class mkdirs extends MethodHook {
+        @Override
+        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
+            return 0;""",
+        """    @ProxyMethod("mkdirs")
+    public static class mkdirs extends MethodHook {
+        @Override
+        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
+            try {
+                if (args != null && args.length > 0 && args[args.length - 1] instanceof String) {
+                    String real = top.niunaijun.blackbox.core.IOCore.get()
+                            .redirectPath((String) args[args.length - 1]);
+                    if (real != null && !real.isEmpty()) {
+                        top.niunaijun.blackbox.utils.FileUtils.mkdirs(real);
+                    }
+                }
+            } catch (Throwable ignored) {
+                // the call itself must never fail
+            }
+            return 0;""",
+        1,
+    ),
+    (
+        # Say in the log what the sign-in service of a space answers, step by step (tag
+        # BlackBoxAccounts), so a failed Google sign-in shows where it stopped. Only the names of the
+        # entries are logged, never their values.
+        "core/system/accounts/BAccountManagerService.java",
+        """        public void onServiceConnected(ComponentName name, IBinder service) {
+            mAuthenticator = IAccountAuthenticator.Stub.asInterface(service);""",
+        """        public void onServiceConnected(ComponentName name, IBinder service) {
+            Log.i("BlackBoxAccounts", "connected to the sign-in service " + name + " (space " + mAccounts.userId + ")");
+            mAuthenticator = IAccountAuthenticator.Stub.asInterface(service);""",
+        1,
+    ),
+    (
+        "core/system/accounts/BAccountManagerService.java",
+        """        public void onServiceDisconnected(ComponentName name) {
+            mAuthenticator = null;""",
+        """        public void onServiceDisconnected(ComponentName name) {
+            Log.w("BlackBoxAccounts", "the sign-in service " + name + " disconnected (space " + mAccounts.userId + ")");
+            mAuthenticator = null;""",
+        1,
+    ),
+    (
+        "core/system/accounts/BAccountManagerService.java",
+        """                mAuthenticator.addAccount(this, mAccountType, authTokenType, requiredFeatures,
+                        options);""",
+        """                Log.i("BlackBoxAccounts", "asking the sign-in service to add a " + mAccountType
+                        + " account (space " + mAccounts.userId + ")");
+                mAuthenticator.addAccount(this, mAccountType, authTokenType, requiredFeatures,
+                        options);""",
+        1,
+    ),
+    (
+        "core/system/accounts/BAccountManagerService.java",
+        """        public void onResult(Bundle result) {
+            mNumResults++;
+            Intent intent = null;""",
+        """        public void onResult(Bundle result) {
+            Log.i("BlackBoxAccounts", "the sign-in service answered with "
+                    + (result == null ? "nothing" : String.valueOf(result.keySet()))
+                    + " (space " + mAccounts.userId + ")");
+            mNumResults++;
+            Intent intent = null;""",
+        1,
+    ),
+    (
+        "core/system/accounts/BAccountManagerService.java",
+        """                ResolveInfo resolveInfo = mPms.resolveActivity(intent, 0, null, mAccounts.userId);
+                if (resolveInfo == null) {
+                    return false;
+                }""",
+        """                ResolveInfo resolveInfo = mPms.resolveActivity(intent, 0, null, mAccounts.userId);
+                if (resolveInfo == null) {
+                    Log.w("BlackBoxAccounts", "the sign-in screen " + intent.getComponent() + " / "
+                            + intent.getAction() + " is not installed in space " + mAccounts.userId);
+                    return false;
+                }""",
+        1,
+    ),
+    (
+        "core/system/accounts/BAccountManagerService.java",
+        """        public void onError(int errorCode, String errorMessage) {
+            mNumErrors++;""",
+        """        public void onError(int errorCode, String errorMessage) {
+            Log.w("BlackBoxAccounts", "sign-in error " + errorCode + ": " + errorMessage
+                    + " (space " + mAccounts.userId + ")");
+            mNumErrors++;""",
+        1,
+    ),
+    (
+        # An account nobody set a per-app visibility for counted as "hidden from every app", so the
+        # calls that filter by visibility (getAccountsByFeatures, getAccountByTypeAndFeatures, the
+        # "for package" lookups that Google services use) returned no accounts at all, even right
+        # after a successful sign-in. Android treats such an account as visible; so does this.
+        "core/system/accounts/BAccountManagerService.java",
+        """        if (AccountManager.VISIBILITY_UNDEFINED != visibility) {
+            return visibility;
+        }
+        return AccountManager.VISIBILITY_NOT_VISIBLE;""",
+        """        if (AccountManager.VISIBILITY_UNDEFINED != visibility) {
+            return visibility;
+        }
+        return AccountManager.VISIBILITY_USER_MANAGED_VISIBLE;""",
+        1,
+    ),
+    (
+        "core/system/accounts/BAccountManagerService.java",
+        """                Integer visibility = account.visibility.get(packageName);
+                if (visibility != null && visibility == AccountManager.VISIBILITY_VISIBLE) {""",
+        """                Integer visibility = account.visibility.get(packageName);
+                if (visibility == null || visibility == AccountManager.VISIBILITY_VISIBLE
+                        || visibility == AccountManager.VISIBILITY_USER_MANAGED_VISIBLE) {""",
+        1,
+    ),
+    (
+        "core/system/accounts/BAccountManagerService.java",
+        """                    Integer visibility = account.visibility.get(packageName);
+                    if (visibility != null && visibility == AccountManager.VISIBILITY_VISIBLE) {""",
+        """                    Integer visibility = account.visibility.get(packageName);
+                    if (visibility == null || visibility == AccountManager.VISIBILITY_VISIBLE
+                            || visibility == AccountManager.VISIBILITY_USER_MANAGED_VISIBLE) {""",
+        1,
+    ),
+    (
         # When the app's process is not running yet, the engine starts it and re-queues the launch
         # with a plain "launcher" intent, which throws away what the caller asked for (a file to
         # open, a sign-in return). Keep the original intent instead.

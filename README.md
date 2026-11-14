@@ -132,6 +132,20 @@ Manager) and in the "Google services" card of the main screen. It sends the same
 account" request Android's Settings sends (`GoogleSignIn.java`), opens the sign-in screen Google
 returns inside the container, and opens Play Store once an account was added.
 
+Three more fixes went in after the button was reported to do nothing:
+
+- The screen Google returns was opened through the app's splash screen, which quits silently when
+  the intent names no package (Google names its screen by class only). The button now starts it
+  directly, checks first that the screen exists in that space, and says so if it does not.
+- If Google Play services give no first answer within 30 seconds, the button now says so instead
+  of waiting forever.
+- The account service treated an account with no per-app visibility as hidden from every app, so
+  the lookups that filter by visibility (the ones Google services and sign-in pickers use) found
+  no accounts even after a successful sign-in. Such an account is now visible, as on Android.
+
+The log (tag `BlackBoxAccounts`) now shows each step: sign-in service found, connected, asked,
+answered (entry names only), screen opened, or the error.
+
 ## If apps still stop
 
 Phone battery managers can be aggressive. Try these first: **Autostart in background** and
@@ -169,6 +183,12 @@ crash. This build switches it off (`apply_overlay.py` blanks the chat id it need
   container with their files (APK, libraries, game data and OBB), and the recent log.
 - Apps that depend on Google Play services, root or integrity checks, banking apps, and some games
   may refuse to run or crash.
+- The container keeps its own copy of the phone's storage (`Android/data`, `Download`, ...). The
+  folders an app expects there (its own `Android/data/<app>/files`, `Android/obb/<app>`, `Download`,
+  `DCIM`, ...) are now created before it starts; they used to be missing, and a game that wrote its
+  first file there without checking (GTA San Andreas, right after its loading bar) crashed.
+  Files the real app saved on the phone, such as downloaded game data, are not visible inside the
+  container, so a game that needs them has to download them again in there.
 - The engine says it supports Android 5 to 14+. Newer versions may have problems. If the build
   breaks after the engine changes, pin it: run the workflow manually and set `engine_ref` to a
   commit that worked.
@@ -185,6 +205,7 @@ crash. This build switches it off (`apply_overlay.py` blanks the chat id it need
 | `overlay/app/src/main/res/` | Colours, theme and layouts that restyle the BlackBox manager screens |
 | `overlay/Bcore/src/main/java/.../fake/service/ICredentialManagerProxy.java` | Answers Android's Credential Manager (Sign in with Google picker, passkeys) with "no saved logins" inside the container; without it Android refuses with a SecurityException and Instagram closes ~10 s after it starts |
 | `overlay/Bcore/src/main/java/.../fake/frameworks/GoogleSignIn.java` | Starts "add a Google account" for one space and opens Google's sign-in screen in the container |
+| `overlay/Bcore/src/main/java/.../core/env/ExternalFolders.java` | Creates the folders an app expects on "phone storage" inside the container before it starts |
 | `overlay/app/src/main/java/.../view/gms/` | GMS Manager list with the Sign in button (copies of the engine's two files, changed) |
 | `overlay/app/src/main/java/.../runner/DebugReport.java` | Pieces of the debug report: process exit reasons, saved crash reports, apps and files inside the container |
 | `overlay/app/src/main/java/.../runner/Tombstone.java` | Reads the native crash record Android keeps for a process (signal, call stack, last log lines) |

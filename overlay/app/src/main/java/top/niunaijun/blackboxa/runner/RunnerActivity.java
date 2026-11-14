@@ -1344,6 +1344,7 @@ public class RunnerActivity extends Activity {
             "Hook in", "mojang", "Minecraft", "WebView", "CrashMonitor", "SimpleCrashFix", "BProcessManager",
             "ActivityStack", "App Died", "CatchMeIfYouCan", "appstatelogger", "UnsatisfiedLink", "dlopen",
             "Fatal signal", "SIGSEGV", "SIGABRT", "tombstone", "libGTASA", "rockstar",
+            "ExternalFolders", "Failed to ensure", "ICredentialManager",
             // Google sign-in
             "IAccountManagerProxy", "GoogleSignatureVerifier", "GooglePlayServicesUtil", "GoogleApiManager",
             "Not allowed to bind", "GLSActivity", "GLSUser", "GoogleAuth"};
@@ -1353,7 +1354,7 @@ public class RunnerActivity extends Activity {
             "AndroidRuntime", "BlackBoxCrash", "BlackBoxAccounts", "CrashMonitor", "SimpleCrashFix",
             "Fatal signal", "DEBUG ", "tombstone", "UnsatisfiedLink", "OpenWith", "startActivityLocked",
             "BProcessManager", "beforeCreateApplication", "SplashScreen", "StayActive", "BgMute",
-            "ActivityStack", "CatchMeIfYouCan", "appstatelogger"};
+            "ActivityStack", "CatchMeIfYouCan", "appstatelogger", "ExternalFolders"};
 
     private static boolean containsAny(String line, String[] words) {
         for (String word : words) {
@@ -1523,6 +1524,18 @@ public class RunnerActivity extends Activity {
             try {
                 d.append("gmsInContainer=").append(BlackBoxCore.get().isInstallGms(USER_ID))
                         .append("/gmsOnPhone=").append(BlackBoxCore.get().isSupportGms()).append(" ");
+            } catch (Throwable ignored) {
+                // not available
+            }
+            try {
+                // How many Google accounts the container holds for this space (a number only).
+                android.os.IBinder accountBinder = BlackBoxCore.get().getService(
+                        top.niunaijun.blackbox.core.system.ServiceManager.ACCOUNT_MANAGER);
+                if (accountBinder != null) {
+                    int googleAccounts = top.niunaijun.blackbox.core.system.accounts.IBAccountManagerService.Stub
+                            .asInterface(accountBinder).getAccountsAsUser("com.google", USER_ID).length;
+                    d.append("googleAccountsInContainer=").append(googleAccounts).append(" ");
+                }
             } catch (Throwable ignored) {
                 // not available
             }
